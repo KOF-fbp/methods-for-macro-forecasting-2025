@@ -5,7 +5,7 @@ Course repository for the ETH autumn 2025 course on "Methods of Macroeconomic Fo
 
 - Lectures: [Dr. Samad Sarferaz](https://sites.google.com/site/samadsarferaz/home)
 - Labs: Merlin Scherer, Lena Will
-- Tech Setup Checklist: [LINK]()
+- Tech Setup Checklist: [LINK](/resources/tech_setup_checklist.pdf)
 
 ## Time Schedule
 
