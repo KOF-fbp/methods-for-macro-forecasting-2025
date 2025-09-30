@@ -1,0 +1,16 @@
+# R environment
+.Rprofile
+.Rhistory
+.RData
+.Ruserdata
+
+# Quarto build outputs
+*_files/
+
+# Local config
+.tool-versions
+
+# OS-specific
+.DS_Store
+Thumbs.db
+

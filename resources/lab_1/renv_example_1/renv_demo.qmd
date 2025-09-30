@@ -1,0 +1,18 @@
+---
+title: "renv ggplot2 demo"
+format:
+  html:
+    self-contained: true
+execute:
+  echo: true
+---
+
+```{r}
+library(ggplot2)
+packageVersion("ggplot2")
+
+set.seed(1)
+df <- data.frame(x = rnorm(2000), y = rnorm(2000))
+ggplot(df, aes(x, y)) + stat_smooth()
+```
+
