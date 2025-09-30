@@ -1,0 +1,10 @@
+authors:
+  - name: "Lena Will"
+    email: "will@kof.ethz.ch"
+    eth_username: "lewill"
+  - name: "Merlin Scherer"
+    email: "scherer@kof.ethz.ch"
+    eth_username: "tischere"
+
+requirements:
+  min_commits_per_author: 2

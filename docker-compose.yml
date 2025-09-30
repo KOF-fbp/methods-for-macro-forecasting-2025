@@ -1,0 +1,13 @@
+services:
+  momf:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    user: "57439:57439" # mambauser UID/GID
+    volumes:
+      - ./submission/data:/app/data
+      - momf_output:/app/output # docker volume for output
+    command: Rscript main.R
+
+volumes:
+  momf_output:

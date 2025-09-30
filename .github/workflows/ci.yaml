@@ -1,0 +1,52 @@
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # fetch full history so git log works
+
+    - name: Setup yq
+      uses: mikefarah/yq@master
+
+    - name: Check author commit requirements
+      run: |
+        # Get author count and requirements
+        author_count=$(yq '.authors | length' ./submission/AUTHORS.yml)
+        min_commits=$(yq '.requirements.min_commits_per_author' ./submission/AUTHORS.yml)
+        
+        echo "Expected authors: $author_count"
+        echo "Minimum commits per author: $min_commits"
+        
+        # Check each author
+        for i in $(seq 0 $((author_count-1))); do
+          email=$(yq ".authors[$i].email" ./submission/AUTHORS.yml | tr -d '"')
+          echo $email
+          
+          commit_count=$(git log --oneline --no-merges --author="$email" | wc -l)
+          
+          if [ $commit_count -ge $min_commits ]; then
+            echo "✅ $name: $commit_count commits"
+          else
+            echo "❌ $name: $commit_count commits (needs $min_commits)"
+            exit 1
+          fi
+        done
+    
+    - name: Build services
+      run: docker compose build
+
+    - name: Check renv status
+      run: docker compose run --rm momf /usr/local/bin/_entrypoint.sh Rscript check_renv.R
+    
+      #    - name: Run code
+      #      run: docker compose run --rm momf
+    
+    - name: Clean up
+      if: always()
+      run: docker compose down -v
