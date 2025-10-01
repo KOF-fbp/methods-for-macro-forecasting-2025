@@ -13,8 +13,7 @@ Course repository for the ETH autumn 2025 course on "Methods of Macroeconomic Fo
 |------|------| ---|
 |02 Oct 2025 |10am - 3pm |Methods Boot Camp|
 |02 Oct 2025 |3pm - 4pm |Lab|
-|03 Oct 2025 |10am - 3pm |Methods Boot Camp|
-|03 Oct 2025 |3pm - 4pm |Lab|
+|03 Oct 2025 |10am - 4pm |Methods Boot Camp with integrated Lab|
 | 08 Oct 2025 | EOB | Hand in your project preferences |
 | 10 Oct 2025 | EOB | Topic allocation |
 | 19 Nov 2025 | 11pm | Hand in your presentation slides |
