@@ -19,7 +19,7 @@ RUN Rscript -e "renv::restore(project = '/app')"
 
 # Copy files
 COPY --chown=$MAMBA_USER:$MAMBA_USER submission/*.R /app/
-COPY --chown=$MAMBA_USER:$MAMBA_USER ./check_renv.R /app/
+COPY --chown=$MAMBA_USER:$MAMBA_USER ./.check_renv.R /app/
 
 USER root
 RUN mkdir -p /app/output && chown -R mambauser:mambauser /app/output
