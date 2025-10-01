@@ -42,7 +42,7 @@ jobs:
       run: docker compose build
 
     - name: Check renv status
-      run: docker compose run --rm momf /usr/local/bin/_entrypoint.sh Rscript check_renv.R
+      run: docker compose run --rm momf /usr/local/bin/_entrypoint.sh Rscript .check_renv.R
     
       #    - name: Run code
       #      run: docker compose run --rm momf
