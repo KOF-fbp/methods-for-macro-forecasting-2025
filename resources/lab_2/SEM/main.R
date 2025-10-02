@@ -4,8 +4,8 @@
 library(koma)
 
 ##### Create system of equations ###############################################
-equations <- 
-"consp ~ domdemoi + consp.L(1),
+equations <-
+  "consp ~ domdemoi + consp.L(1),
 ifix ~ srate + ifix.L(1),
 srate ~ srate_ge + srate.L(1),
 pconsp ~ wkfreuro + poilusd + pconsp.L(1),
@@ -16,7 +16,7 @@ nifix == 1*ifix + 1*pifix,
 ndomdemoi == 1*nconsp + 1*nifix"
 
 ## Vector of exogenous variables
-exogenous_variables <- c("srate_ge","wkfreuro","poilusd","consg", "nconsg")
+exogenous_variables <- c("srate_ge", "wkfreuro", "poilusd", "consg", "nconsg")
 
 ##### Define dates for estimation #######################
 dates <- list(
@@ -33,30 +33,26 @@ sys_eq$stochastic_equations
 sys_eq$character_gamma_matrix
 sys_eq$character_beta_matrix
 
+# Access documentation
+?koma::system_of_equations()
+
 ##### Load data ################################################################
-df <- read.csv("../../../submission/data/data_quarterly.csv") 
-# shorten variable names
-colnames(df) <- gsub("ch.kof.vja.koma.", "", colnames(df))
+df <- read.csv("../../../submission/data/data_quarterly.csv")
 # remove data column
 df$date <- NULL
 # convert to time series
 raw_data <- lapply(seq_len(ncol(df)), function(i) {
- ts(df[i], start = c(1992,1), end = c(2027,4), frequency = 4)
- })
+  ts(df[i], start = c(1992, 1), end = c(2027, 4), frequency = 4)
+})
 names(raw_data) <- colnames(df)
 raw_data <- raw_data[c(sys_eq$endogenous_variables, sys_eq$exogenous_variables)]
 # shorten endogenous series to before forecast start
-raw_data[sys_eq$endogenous_variables] <- lapply(sys_eq$endogenous_variables, function(x){
-  window(raw_data[[x]], end=c(2025,3))
+raw_data[sys_eq$endogenous_variables] <- lapply(sys_eq$endogenous_variables, function(x) {
+  window(raw_data[[x]], end = c(2025, 3))
 })
 
 #### Compute growth rates for forecasts ########################################
 ts_data <- lapply(names(raw_data), function(x) {
-  # Check for non-numeric data
-  if (!is.numeric(raw_data[[x]])) {
-    stop(paste("Non-numeric data encountered in variable:", x))
-  }
-
   series_type <- "level"
   if (x %in% c("srate", "srate_ge")) {
     series_type <- "rate"
@@ -79,9 +75,9 @@ estimates <- koma::estimate(
 )
 
 ## Analyze and summarize posterior estimates
-print(estimates)  # System of equations with posterior means
-summary(estimates, variables = "ifix")  # Posterior mean and 90% error bands
-summary(estimates, variables = c("consp", "ifix"))  # Posterior means and 90% error bands
+print(estimates) # System of equations with posterior means
+summary(estimates, variables = "ifix") # Posterior mean and 90% error bands
+summary(estimates, variables = c("consp", "ifix")) # Posterior means and 90% error bands
 
 
 ##### Conditional Forecasting (empty) ##########################################
@@ -90,7 +86,7 @@ restrictions <- list() # no conditional forecasts
 
 ##### Forecasting ##############################################################
 # Compute forecasts (default is point forecast and posterior mean)
-forecasts <- koma::forecast(estimates, dates, restrictions = restrictions)#, point_forecast = list(active=TRUE) )
+forecasts <- koma::forecast(estimates, dates, restrictions = restrictions) # , point_forecast = list(active=TRUE) )
 
 ## Print forecasts
 print(forecasts)
@@ -98,7 +94,7 @@ print(forecasts, variables = c("consp"))
 print(forecasts, variables = c("consp", "ifix"))
 
 ## Compute levels
-#level(forecasts$mean$consp)
+# level(forecasts$mean$consp)
 
 ## Plot forecasts
 plot(forecasts, variables = c("ifix"))
@@ -110,15 +106,15 @@ restrictions <- list(
 )
 
 # Compute forecasts (default is point forecast and posterior mean)
-forecasts <- koma::forecast(estimates, dates, restrictions = restrictions)#, point_forecast = list(active=TRUE) )
+forecasts <- koma::forecast(estimates, dates, restrictions = restrictions) # , point_forecast = list(active=TRUE) )
 
 ## Print forecasts
 print(forecasts)
 print(forecasts, variables = c("ifix"))
 
 ##### Informative prior ########################################################
-equations <- 
-"consp ~ domdemoi + consp.L(1),
+equations <-
+  "consp ~ domdemoi + consp.L(1),
 ifix ~ {0,1000}constant + {0,0.00001}srate + {0,0.00001}ifix.L(1) + {3,0.0001},
 srate ~ srate_ge + srate.L(1),
 pconsp ~ wkfreuro + poilusd + pconsp.L(1),
@@ -134,12 +130,12 @@ estimates_informative <- koma::estimate(
 )
 
 ## Analyze and summarize posterior estimates
-print(estimates_informative)  # System of equations with posterior means
-summary(estimates_informative, variables = "ifix")  # Posterior mean and 90% error bands
+print(estimates_informative) # System of equations with posterior means
+summary(estimates_informative, variables = "ifix") # Posterior mean and 90% error bands
 
 ##### Re-estimate single equations ##############################################
-equations <- 
-"consp ~ domdemoi + consp.L(1),
+equations <-
+  "consp ~ domdemoi + consp.L(1),
 ifix ~ srate + ifix.L(1) + ifix.L(2),
 srate ~ srate_ge + srate.L(1),
 pconsp ~ wkfreuro + poilusd + pconsp.L(1),
@@ -150,10 +146,10 @@ nifix == 1*ifix + 1*pifix"
 sys_eq <- koma::system_of_equations(equations, exogenous_variables)
 
 estimates_ifix <- koma::estimate(
-  estimates=estimates,ts_data,sys_eq, dates,
+  estimates = estimates, ts_data, sys_eq, dates,
   options = list(ndraws = 200)
 )
 
 ## Analyze and summarize posterior estimates
-print(estimates_ifix)  # System of equations with posterior means
-summary(estimates_ifix, variables = "ifix")  # Posterior mean and 90% error bands
+print(estimates_ifix) # System of equations with posterior means
+summary(estimates_ifix, variables = "ifix") # Posterior mean and 90% error bands
