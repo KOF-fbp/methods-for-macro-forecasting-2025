@@ -3,6 +3,88 @@
 # Documentation: https://timothymerlin.github.io/koma/
 library(koma)
 
+## Equations Syntax ############################################################
+# Stochastic equations:
+# With default intercept:
+"consumption ~ gdp + consumption.L(1)"
+# Without intercept:
+"consumption ~ gdp + consumption.L(1) - 1"
+# Explicit intercept:
+"consumption ~ 1 + gdp + consumption.L(1)"
+
+# Identity equations:
+"gdp == 0.7*consumption + 0.2*investment + 0.2*government - 0.1*net_exports"
+
+# Weights:
+"gdp == (nom_cons/nom_gdp) * cons"
+
+# Lag Notation:
+"x.L(1)"
+"lag(x, 1)"
+
+# Range of lags:
+"x.L(1:3)"
+"lag(x, 1:3)"
+
+# Mix range and specific lags:
+"x.L(1:3, 5)"
+
+# Priors
+"{1, 0.1} x3"
+
+# Equation-specific tau
+"consumption ~ constant + gdp + consumption.L(1) + consumption.L(2) [tau = 1.2]"
+
+## extended time series (ets) class ############################################
+v <- ets(data = 1:10, start = c(2019, 1), frequency = 4)
+print(v)
+
+w <- ets(
+  data = 1:10, start = c(2019, 1), frequency = 4,
+  series_type = "level", value_type = "real", method = "diff_log"
+)
+print(w)
+
+ts_obj <- stats::ts(1:10, start = c(2019, 1), frequency = 4)
+
+x <- as_ets(
+  ts_obj,
+  series_type = "level",
+  value_type = "real",
+  method = "diff_log"
+)
+
+rate(x)
+stats::window(x, start = c(2019, 4))
+level(stats::window(rate(x), start = c(2019, 4)))
+
+stats::window(x, start = 2018, extend = TRUE)
+
+stats::window(rate(x), start = 2018, extend = TRUE)
+
+na.omit(window(x, start = 2018, extend = TRUE))
+
+tempdisagg::ta(x, conversion = "sum", to = "annual")
+
+stats::window(rate(x), start = 2020)
+attr(rate(x), "anker")
+
+rebase(x, start = c(2020, 1), end = c(2020, 1))
+rebase(x, start = c(2020, 1), end = c(2020, 4))
+
+lag(rate(x), k = -1)
+
+log(x)
+diff(x)
+x * 10
+x[1:2]
+x[3:5]
+x[4:3]
+x / x
+x * x
+x + x
+x - x
+
 ##### Create system of equations ###############################################
 # Equation syntax:
 # https://timothymerlin.github.io/koma/articles/equations.html
