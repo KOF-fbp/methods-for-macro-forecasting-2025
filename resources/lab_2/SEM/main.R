@@ -203,7 +203,9 @@ srate ~ srate_ge + srate.L(1),
 pconsp ~ wkfreuro + poilusd + pconsp.L(1),
 pifix ~ pifix.L(1),
 domdemoi == (nconsp/ndomdemoi)*consp + (nconsg/ndomdemoi)*consg + (nifix/ndomdemoi)*ifix,
-nconsp == 1*consp + 1*pconsp"
+nconsp == 1*consp + 1*pconsp,
+nifix == 1*ifix + 1*pifix"
+
 sys_eq <- koma::system_of_equations(equations, exogenous_variables)
 
 estimates_informative <- koma::estimate(
@@ -223,7 +225,9 @@ srate ~ srate_ge + srate.L(1),
 pconsp ~ wkfreuro + poilusd + pconsp.L(1),
 pifix ~ pifix.L(1),
 domdemoi == (nconsp/ndomdemoi)*consp + (nconsg/ndomdemoi)*consg + (nifix/ndomdemoi)*ifix,
-nconsp == 1*consp + 1*pconsp"
+nconsp == 1*consp + 1*pconsp,
+nifix == 1*ifix + 1*pifix"
+
 sys_eq <- koma::system_of_equations(equations, exogenous_variables)
 
 estimates_ifix <- koma::estimate(
