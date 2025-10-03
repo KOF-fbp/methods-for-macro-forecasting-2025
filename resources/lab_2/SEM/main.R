@@ -4,6 +4,8 @@
 library(koma)
 
 ##### Create system of equations ###############################################
+# Equation syntax:
+# https://timothymerlin.github.io/koma/articles/equations.html
 equations <-
   "consp ~ domdemoi + consp.L(1),
 ifix ~ srate + ifix.L(1),
@@ -12,13 +14,12 @@ pconsp ~ wkfreuro + poilusd + pconsp.L(1),
 pifix ~ pifix.L(1),
 domdemoi == (nconsp/ndomdemoi)*consp + (nconsg/ndomdemoi)*consg + (nifix/ndomdemoi)*ifix,
 nconsp == 1*consp + 1*pconsp,
-nifix == 1*ifix + 1*pifix,
-ndomdemoi == 1*nconsp + 1*nifix"
+nifix == 1*ifix + 1*pifix"
 
 ## Vector of exogenous variables
-exogenous_variables <- c("srate_ge", "wkfreuro", "poilusd", "consg", "nconsg")
+exogenous_variables <- c("srate_ge", "wkfreuro", "poilusd", "consg")
 
-##### Define dates for estimation #######################
+##### Define dates for estimation ##############################################
 dates <- list(
   estimation = list(start = c(1996, 1), end = c(2019, 4)),
   dynamic_weights = list(start = c(1996, 1), end = c(2024, 4)),
@@ -45,7 +46,7 @@ raw_data <- lapply(seq_len(ncol(df)), function(i) {
   ts(df[i], start = c(1992, 1), end = c(2027, 4), frequency = 4)
 })
 names(raw_data) <- colnames(df)
-raw_data <- raw_data[c(sys_eq$endogenous_variables, sys_eq$exogenous_variables)]
+raw_data <- raw_data[c(sys_eq$endogenous_variables, sys_eq$exogenous_variables, "nconsg", "ndomdemoi")]
 # shorten endogenous series to before forecast start
 raw_data[sys_eq$endogenous_variables] <- lapply(sys_eq$endogenous_variables, function(x) {
   window(raw_data[[x]], end = c(2025, 3))
@@ -120,8 +121,7 @@ srate ~ srate_ge + srate.L(1),
 pconsp ~ wkfreuro + poilusd + pconsp.L(1),
 pifix ~ pifix.L(1),
 domdemoi == (nconsp/ndomdemoi)*consp + (nconsg/ndomdemoi)*consg + (nifix/ndomdemoi)*ifix,
-nconsp == 1*consp + 1*pconsp,
-nifix == 1*ifix + 1*pifix"
+nconsp == 1*consp + 1*pconsp"
 sys_eq <- koma::system_of_equations(equations, exogenous_variables)
 
 estimates_informative <- koma::estimate(
@@ -141,8 +141,7 @@ srate ~ srate_ge + srate.L(1),
 pconsp ~ wkfreuro + poilusd + pconsp.L(1),
 pifix ~ pifix.L(1),
 domdemoi == (nconsp/ndomdemoi)*consp + (nconsg/ndomdemoi)*consg + (nifix/ndomdemoi)*ifix,
-nconsp == 1*consp + 1*pconsp,
-nifix == 1*ifix + 1*pifix"
+nconsp == 1*consp + 1*pconsp"
 sys_eq <- koma::system_of_equations(equations, exogenous_variables)
 
 estimates_ifix <- koma::estimate(
@@ -152,4 +151,5 @@ estimates_ifix <- koma::estimate(
 
 ## Analyze and summarize posterior estimates
 print(estimates_ifix) # System of equations with posterior means
+# ?summary.koma_estimate
 summary(estimates_ifix, variables = "ifix") # Posterior mean and 90% error bands
