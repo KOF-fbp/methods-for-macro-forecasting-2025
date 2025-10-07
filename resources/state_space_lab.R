@@ -3,6 +3,8 @@
 
 rm(list=ls()) # ensure empty workspace
 
+
+
 # Loading packages
 library(MASS) # package MASS has a function for drawing from the multivariate normal
 library(scales) # allows for shaded polygon in plots
