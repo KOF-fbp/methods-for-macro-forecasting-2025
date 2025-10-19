@@ -1,0 +1,28 @@
+{
+    "id": "04351DAD",
+    "path": null,
+    "project_path": null,
+    "type": "object_explorer",
+    "hash": "0",
+    "contents": "",
+    "dirty": false,
+    "created": 1760687423145.0,
+    "source_on_save": false,
+    "relative_order": 7,
+    "properties": {
+        "id": "243dc59d8d6249edad2cedefd255a14c",
+        "name": "df$inflation",
+        "title": "df$inflation",
+        "language": "R",
+        "source_window_id": "",
+        "Source": "Source"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 0,
+    "encoding": "",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1760687423145,
+    "read_only": false,
+    "read_only_alternatives": []
+}

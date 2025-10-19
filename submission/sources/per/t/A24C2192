@@ -1,0 +1,24 @@
+{
+    "id": "A24C2192",
+    "path": "~/methods-for-macro-forecasting-2025/resources/lab_1/ar1_rolling.R",
+    "project_path": null,
+    "type": "r_source",
+    "hash": "3819238010",
+    "contents": "",
+    "dirty": false,
+    "created": 1760687153398.0,
+    "source_on_save": false,
+    "relative_order": 4,
+    "properties": {
+        "source_window_id": "",
+        "Source": "Source"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1760685352,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1760685352,
+    "read_only": false,
+    "read_only_alternatives": []
+}
