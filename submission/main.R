@@ -14,14 +14,17 @@ head(df)
 # date is in format YYYY-MM -> tranformation to date type
 df$date <- as.Date(paste0(df$date, "-01"))
 
+# only dates until 01.10.2025
+df <- df %>% filter(date <= as.Date("2025-10-01"))
+
 # create inflation variable from cpi data
-df$inflation <- 100 * (log(df$cpi) - dplyr::lag(log(df$cpi), 1))
+df$inflation <- (df$cpi - dplyr::lag(df$cpi, 1)) / dplyr::lag(df$cpi, 1)
 
 # remove first 4 rows
 df <- df %>% filter(!is.na(inflation)) 
 
 # define the variables to be forecasted
-forecast_variables <- c("gdp", "inflation", "wkfreuro")
+#forecast_variables <- c("gdp", "inflation", "wkfreuro")
 
 # define the rate variables
 rate_variables <- c("inflation", "wkfreuro", "urilo", "srate", "srate_ge")
@@ -34,7 +37,7 @@ for (var in names(df)) {
 }
 # to growth rate
 for (var in names(df)) {
-  if (!(var %in% rate_variables) & var != "date") {
+  if (var != "date") {
     df[[var]] <- 100 * (df[[var]] - dplyr::lag(df[[var]], 1))
   }
 }
@@ -62,32 +65,27 @@ correlations <- df %>%
   cor()
 
 print(correlations) 
-# -> inflation seems to influence / is influenced the exchange rate as well as gpd
-# -> gdp has low correlation with exchange rate
 
 # first simple BVAR model
 
-data <- df %>% select(all_of(forecast_variables))
-data <- as.matrix(data)
-# first 50 rows
-train_data <- data[1:50, ]
-test_data <- data[51:nrow(data), ]
+df <- df[, colSums(is.na(df)) == 0]
 
 model <- bvar(
-  data,
-  lags = 1,
-  n_draw = 10000,
-  n_burn = 2500,
+  df%>% select(-date),
+  lags = 12,
+  n_draw = 500,
+  n_burn = 200,
   n_thin = 1 #thinning
 ) 
 
+plot(model)
 # rolling forecast --------------------------------------
 
 # settings
-window_size <- 80
+window_size <- 120
 horizon <- 1
 n_obs <- nrow(data)
-lag_number <- 4
+lag_number <- 12
 
 # building a matrix to save results of q50
 pred_q50 <- matrix(NA_real_, nrow = n_obs, ncol = length(forecast_variables),
@@ -98,6 +96,8 @@ pred_q16 <- matrix(NA_real_, nrow = n_obs, ncol = length(forecast_variables),
 # building a matrix to save results of q84
 pred_q84 <- matrix(NA_real_, nrow = n_obs, ncol = length(forecast_variables),
                    dimnames = list(NULL, forecast_variables))
+
+data <- df
 
 for (i in seq(from = window_size + lags, to = n_obs - horizon)){
   
@@ -161,22 +161,27 @@ for (var in forecast_variables) {
     predicted = pred_q50[, var],
     lower = pred_q16[, var],
     upper = pred_q84[, var]
-  ) %>% filter(!is.na(predicted)) # to filter out the first x that are not used due to the rolling window
+  ) %>% filter(!is.na(predicted))
   
   plot <- ggplot(df_plot, aes(x = date)) +
-    geom_line(aes(y = actual, color = "Actual")) +
-    geom_line(aes(y = predicted, color = "Predicted")) +
-    geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.1) +
-    labs(title = paste("Forecast vs Actual for", var),
-         y = var,
-         color = "Legend") +
-    theme_bw()
+    geom_ribbon(aes(ymin = lower, ymax = upper), fill = "grey", alpha = 0.4) +
+    geom_line(aes(y = predicted), color = "red", size = 1) +
+    geom_line(aes(y = actual), color = "navy", linetype = "dashed", size = 0.9) +
+    labs(
+      title = "",
+      x = "Date",
+      y = var
+    ) +
+    theme_bw() +
+    theme(
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+      panel.grid.minor = element_blank()
+    )
   
   print(plot)
 }
 
-plot(model)
-summary(model)
+
 
 # model 2 with more lags
 
