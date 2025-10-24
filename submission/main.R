@@ -8,8 +8,8 @@ library(BVAR)
 # set seed 
 set.seed(42)
 
+# load data
 df <- utils::read.csv("data/data_quarterly.csv")
-head(df)
 
 # date is in format YYYY-MM -> tranformation to date type
 df$date <- as.Date(paste0(df$date, "-01"))
@@ -20,14 +20,17 @@ df <- df %>% filter(date <= as.Date("2025-07-01"))
 # create inflation variable from cpi data
 df$inflation <- (df$cpi - dplyr::lag(df$cpi, 1)) / dplyr::lag(df$cpi, 1) 
 
-# remove first 4 rows
+# remove first row (created due to the definition of inflation)
 df <- df %>% filter(!is.na(inflation)) 
 
 # define the variables to be forecasted
 forecast_variables <- c("gdp", "inflation", "wkfreuro")
 
-# plot the forecast variables
+# external variables
+selected_variables <- c("consg", "cpi", "domdem", "exc1", "extot2", "imc2", "imtot2", 
+                        "lprodos", "nconstot", "ndomdem2", "urilo",  "srate")
 
+# plot the forecast variables
 for (var in forecast_variables) {
   ggplot(df, aes(x = date, y = .data[[var]])) +
     geom_line() +
@@ -45,114 +48,94 @@ for (var in names(df)) {
     df[[var]] <- log(df[[var]])
   }
 }
-# to growth rate
+# to growth rate (only transfrom the non rate variables)
 for (var in names(df)) {
-  if (var != "date") {
+  if (!(var %in% rate_variables) & var != "date") {
     df[[var]] <- 100 * (df[[var]] - dplyr::lag(df[[var]], 1))
   }
 }
 
-# remove nans
+# remove nans created by definition of growth rates
 df <- df %>% filter(!is.na(gdp))
 
 # plot with the timeseries of the forecast variables 
 
-# reshape to long format for easy plotting
 df_long <- df %>%
-  select(date, all_of(forecast_variables)) %>%
+  dplyr::select(date, all_of(forecast_variables)) %>%
   pivot_longer(-date, names_to = "variable", values_to = "rate")
-
-# plot
 ggplot(df_long, aes(x = date, y = rate, color = variable)) +
   geom_line() +
   labs(title = "Forecast Variables", x = "Date", y = "rate")+
   theme_bw()
 
-# get the correlation between variables
-
+# get the correlation between variables (simply interessting to see)
 correlations <- df %>%
   dplyr::select(all_of(forecast_variables)) %>%
   cor()
-
 print(correlations) 
 
-# first simple BVAR model
+# BVAR models for exploration --------------------------------------------------
+
+# to better understand how the bvar models and priors work
+
+## first simple BVAR model for exploration ---------
 
 df <- df[, colSums(is.na(df)) == 0]
 
 model <- bvar(
-  df%>% select(all_of(forecast_variables), all_of(selected_variables)),
-  lags = 12,
-  n_draw = 1000,
-  n_burn = 250,
+  df%>% dplyr::select(all_of(forecast_variables)),
+  lags = 1,
+  n_draw = 100000,
+  n_burn = 2500,
   n_thin = 1 #thinning
 ) 
 
 plot(model)
 
-# BVAR with minisota prior
+## BVAR with minisota prior for exploration ---------
 
 mn <- bv_minnesota(
-  lambda = bv_lambda(mode = 0.2, sd = 0.3, min = 0.001, max = 5),
+  lambda = bv_lambda(mode = 0.5, sd = 0.1, min = 0.001, max = 5),
   alpha  = bv_alpha(mode = 4),
 )
 
-mn <- bv_mn(
-  lambda = bv_lambda(),
-  alpha = bv_alpha(),
-  
-  #psi = bv_psi(),
-  b = 1
-)
-
 priors <- bv_priors(hyper = c("lambda", "alpha"), mn = mn)
-bv_priors(hyper = c("lambda", "alpha", "psi"))
-
-priors <- mn
 
 model <- bvar(
-  df%>% select(all_of(forecast_variables), all_of(selected_variables)),
+  df%>% dplyr::select(all_of(forecast_variables)),
   lags = 12,
-  n_draw = 10000,
-  n_burn = 2500,
+  n_draw = 100000,
+  n_burn = 25000,
   n_thin = 1,
   priors = priors,
   verbose = TRUE
 )
 
 p <- plot(model)
-model$priors
-model$optim
-summary(model)
-summary(model$priors)
+print(p)
 
-# BVAR with miniapolis prior
+## BVAR with Minnesota prior and sum-of-coefficients prior ---------
 
-bv_met <- bv_metropolis(
-  scale_hess = 0.01,
-  adjust_acc = FALSE,
-  adjust_burn = 0.75,
-  acc_lower = 0.25,
-  acc_upper = 0.45,
-  acc_change = 0.01
+mn <- bv_minnesota(
+  lambda = bv_lambda(mode = 0.2, sd = 0.1, min = 0.001, max = 5),
+  alpha  = bv_alpha(mode = 4),
 )
-
+soc <- bv_soc(mode = 1, sd = 0.5)   # shrink sum of AR coeffs to 1, with variance
 priors <- bv_priors(
   hyper = c("lambda", "alpha", "psi"),
+  mn = mn,
+  soc = soc
 )
-
 model <- bvar(
-  df%>% dplyr::select(all_of(forecast_variables), all_of(selected_variables)),
-  lags = 1,
-  n_draw = 10000,
-  n_burn = 2500,
+  df%>% dplyr::select(all_of(forecast_variables)),
+  lags = 8,
+  n_draw = 100000,
+  n_burn = 25000,
   n_thin = 1,
   priors = priors,
-  metropolis = bv_met,
   verbose = TRUE
 )
-
-p <- plot(model)
+plot(model)
 
 
 # rolling window forecast --------------------------------------
@@ -161,7 +144,7 @@ p <- plot(model)
 window_size <- 110
 horizon <- 1
 n_obs <- nrow(data)
-lag_number <-4
+lag_number <- 8
 
 # building a matrix to save results of q50
 pred_q50 <- matrix(NA_real_, nrow = n_obs, ncol = length(forecast_variables),
@@ -181,8 +164,6 @@ pred_q975 <- matrix(NA_real_, nrow = n_obs, ncol = length(forecast_variables),
 
 data <- df
 
-selected_variables <- c("consg", "cpi", "domdem", "exc1", "extot2", "imc2", "imtot2", 
-                        "lprodos", "nconstot", "ndomdem2", "urilo",  "srate")
 
 # check all for stationarity
 library(tseries)
@@ -201,19 +182,29 @@ quantile_bands <- c("2.5%", "16%", "50%", "84%", "97.5%")
 
 # set priors -------------
 mn <- bv_minnesota(
-  lambda = bv_lambda(mode = 0.2, sd = 0.1, min = 0.001, max = 5),
-  alpha  = bv_alpha(mode = 4),
+  lambda = bv_lambda(mode = 0.4, sd = 0.3, min = 0.001, max = 5),
+  alpha  = bv_alpha(mode = 3),
 )
 priors <- bv_priors(hyper = c("lambda", "alpha", "psi"), mn = mn)
 
-soc <- bv_soc(mode = 1, sd = 0.5)   # shrink sum of AR coeffs to 1, with variance
+soc <- bv_soc(mode = 1, sd = 0.4)   # shrink sum of AR coeffs to 1, with variance
 
 priors <- bv_priors(
   hyper = c("lambda", "alpha", "psi"),
   mn = mn,
-  soc = soc,
-  sur = bv_sur(mode = 2, sd = 0.5, min = 0.0001, max = 50)
+  soc = soc
+  #sur = bv_sur(mode = 2, sd = 0.5, min = 0.0001, max = 50)
 )
+
+#bv_met <- bv_metropolis(
+#  scale_hess = 0.01,
+#  adjust_acc = FALSE,
+#  adjust_burn = 0.75,
+#  acc_lower = 0.25,
+#  acc_upper = 0.45,
+#  acc_change = 0.01
+#)
+
 
 # rolling window ---------
 for (i in seq(from = window_size + lags, to = n_obs - horizon)) {
@@ -221,8 +212,10 @@ for (i in seq(from = window_size + lags, to = n_obs - horizon)) {
   train_start <- i - window_size + 1
   train_end <- i
   
+  # select the data for the rolling window
   y_train <- data[train_start:train_end, ]
   
+  # fitting model
   trained_model <- bvar(
     y_train %>% dplyr::select(all_of(forecast_variables)),
     lags = lag_number,
@@ -230,8 +223,9 @@ for (i in seq(from = window_size + lags, to = n_obs - horizon)) {
     n_burn = 2500,
     n_thin = 1,
     priors = priors,
-    metropolis = bv_met,
+   # metropolis = bv_met,
   )
+  
   
   prediction <- predict(trained_model, horizon = horizon, conf_bands = c(0.16, 0.025))
   
@@ -245,6 +239,7 @@ for (i in seq(from = window_size + lags, to = n_obs - horizon)) {
     mat[j, ] <- pred_quants[, 1, j]
   }
   
+  # save the results
   results <- as_tibble(mat, rownames = "variable") %>%
     rename(
       q025 = `2.5%`,
@@ -276,9 +271,7 @@ for (i in seq_along(forecast_variables)) {
 }
 
 # plot the forecasts of the different variables
-
 library(patchwork)
-
 plots <- list()
 
 
@@ -344,12 +337,13 @@ combined_plot <- wrap_plots(plots, ncol = 1)
 combined_plot
 
 
-# benchmark using normal VAR
+# benchmark using normal VAR ( not really a benchmark, var with defussion prior) ---------
 
+library(vars)
 window_size <- 110
 horizon <- 1
 n_obs <- nrow(data)
-lag_number <- 4
+lag_number <- 1
 
 # matrix for results (point forecasts only)
 pred_q50_var <- matrix(NA_real_, nrow = n_obs, ncol = length(forecast_variables),
