@@ -4,7 +4,7 @@
 # combining the monthly KOF Economic Barometer with quarterly
 # series from ./data/data_quarterly.csv.
 # ---------------------------------------------------------------
-
+# testing
 # --- Project setup ----------------------------------------------------------
 args_full <- commandArgs(trailingOnly = FALSE)
 script_arg <- grep("^--file=", args_full, value = TRUE)
