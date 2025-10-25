@@ -257,6 +257,117 @@ if (eval_horizon >= 1) {
   message("Evaluation skipped: not enough observations left after reserving lags.")
 }
 
+cv_table <- NULL
+cv_path <- NULL
+cv_folds <- 0
+cv_horizon <- {
+  max_cv <- nrow(qdat) - (n_lags + 2)
+  if (max_cv < 0) max_cv <- 0
+  min(8, max_cv)
+}
+
+if (cv_horizon >= 1) {
+  target_vars <- c("gdp_growth", "inflation", "exch_rate")
+  cv_indices <- seq.int(nrow(qdat) - cv_horizon + 1, nrow(qdat))
+  cv_records <- vector("list", length(cv_indices))
+
+  for (i in seq_along(cv_indices)) {
+    idx <- cv_indices[i]
+    train_rows <- idx - 1
+    if (train_rows <= n_lags) {
+      cv_records[[i]] <- NULL
+      next
+    }
+
+    q_train <- qdat %>% dplyr::slice_head(n = train_rows)
+    q_test <- qdat %>% dplyr::slice(idx)
+
+    baro_train_end <- quarter_to_month_end(q_train$qtr[nrow(q_train)])
+    baro_train <- stats::window(baro_ts, end = baro_train_end)
+    Y_cv <- build_Y(q_train, baro_train)
+
+    mod_cv <- try(estimate_mfvar_model(Y_cv, n_lags, n_fcst = 1, seed = 200 + idx), silent = TRUE)
+    if (inherits(mod_cv, "try-error")) {
+      warning(sprintf("MF-VAR cross-validation fold %d failed: %s", idx, mod_cv))
+      cv_records[[i]] <- NULL
+      next
+    }
+
+    fc_cv_raw <- try(predict(mod_cv, aggregate_fcst = TRUE, pred_bands = 0.8), silent = TRUE)
+    if (inherits(fc_cv_raw, "try-error")) {
+      warning(sprintf("MF-VAR prediction failed for fold %d: %s", idx, fc_cv_raw))
+      cv_records[[i]] <- NULL
+      next
+    }
+
+    mfvar_fold <- fc_cv_raw %>%
+      filter(variable %in% target_vars) %>%
+      select(variable, mfvar = median)
+
+    actual_fold <- q_test %>%
+      select(dplyr::all_of(target_vars)) %>%
+      tidyr::pivot_longer(cols = dplyr::everything(), names_to = "variable", values_to = "actual")
+
+    ar_fold <- tibble::tibble(
+      variable = target_vars,
+      ar2 = vapply(target_vars, function(var) {
+        series <- q_train[[var]]
+        tryCatch({
+          fit <- withCallingHandlers(
+            stats::arima(series, order = c(2, 0, 0)),
+            warning = function(w) {
+              warning(sprintf("AR(2) warning in fold %d for %s: %s", idx, var, w$message))
+              invokeRestart("muffleWarning")
+            }
+          )
+          as.numeric(stats::predict(fit, n.ahead = 1)$pred[1])
+        }, error = function(e) {
+          warning(sprintf("AR(2) benchmark failed in fold %d for %s: %s", idx, var, e$message))
+          NA_real_
+        })
+      }, numeric(1))
+    )
+
+    cv_records[[i]] <- actual_fold %>%
+      left_join(mfvar_fold, by = "variable") %>%
+      left_join(ar_fold, by = "variable") %>%
+      mutate(fold_index = idx)
+  }
+
+  cv_results <- dplyr::bind_rows(cv_records)
+  if (nrow(cv_results)) {
+    cv_folds <- dplyr::n_distinct(cv_results$fold_index)
+
+    mfvar_cv <- cv_results %>%
+      group_by(variable) %>%
+      summarise(
+        model = "MF-VAR",
+        rmse = safe_rmse(mfvar, actual),
+        mae = safe_mae(mfvar, actual),
+        .groups = "drop"
+      )
+
+    ar_cv <- cv_results %>%
+      group_by(variable) %>%
+      summarise(
+        model = "AR(2)",
+        rmse = safe_rmse(ar2, actual),
+        mae = safe_mae(ar2, actual),
+        .groups = "drop"
+      )
+
+    cv_table <- dplyr::bind_rows(mfvar_cv, ar_cv) %>%
+      arrange(variable, model)
+
+    cv_path <- file.path(OUT_DIR, "forecast_cross_validation.csv")
+    readr::write_csv(cv_results, cv_path)
+  } else {
+    message("Cross-validation skipped: no valid folds produced.")
+  }
+} else {
+  message("Cross-validation skipped: not enough data for folds beyond lag length.")
+}
+
 # --- Prior, estimation, and forecasting -------------------------------------
 mod_ss <- estimate_mfvar_model(Y, n_lags, n_fcst = 12, seed = 123)
 
@@ -272,6 +383,14 @@ if (!is.null(eval_table)) {
   print(eval_table, n = nrow(eval_table))
 } else {
   cat("\nSkipped (insufficient holdout sample after reserving lags).\n")
+}
+
+cat("\n==== Rolling 1-step cross-validation ====\n")
+if (!is.null(cv_table)) {
+  cat(sprintf("\nFolds: %d (last %d quarter(s)).\n\n", cv_folds, cv_horizon))
+  print(cv_table, n = nrow(cv_table))
+} else {
+  cat("\nSkipped (not enough data or no valid folds).\n")
 }
 sink()
 
@@ -308,7 +427,11 @@ if (nrow(fc_gdp)) {
   p <- ggplot(fc_gdp, aes(x = time)) +
     geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.25) +
     geom_line(aes(y = median)) +
-    labs(title = "MF-VAR forecast for GDP growth (annualised %)", x = NULL, y = NULL) +
+    labs(
+      title = "MF-VAR forecast for GDP growth (annualised %)",
+      x = "Quarter",
+      y = "Annualised percentage"
+    ) +
     theme_minimal(base_size = 12)
   ggsave(file.path(OUT_DIR, "forecast_gdp_growth.png"), p, width = 8, height = 4.5, dpi = 120)
 }
@@ -327,6 +450,12 @@ if (!is.null(evaluation_path)) {
   message_lines <- c(message_lines, "  - output/forecast_evaluation.csv\n")
 } else {
   message_lines <- c(message_lines, "  - forecast evaluation skipped (not enough holdout data)\n")
+}
+
+if (!is.null(cv_path)) {
+  message_lines <- c(message_lines, "  - output/forecast_cross_validation.csv\n")
+} else {
+  message_lines <- c(message_lines, "  - cross-validation skipped or unavailable\n")
 }
 
 message_lines <- c(
