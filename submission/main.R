@@ -36,7 +36,7 @@ for (var in forecast_variables) {
     geom_line() +
     labs(title = paste(""), x = "Date", y = var) +
     theme_bw() -> p
-  print(p)
+  print(p) 
 }
 
 # define the rate variables
