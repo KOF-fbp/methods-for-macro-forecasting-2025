@@ -6,44 +6,97 @@
 # ---------------------------------------------------------------
 # testing
 # --- Project setup ----------------------------------------------------------
-args_full <- commandArgs(trailingOnly = FALSE)
-script_arg <- grep("^--file=", args_full, value = TRUE)
-if (length(script_arg)) {
-  script_path <- normalizePath(sub("^--file=", "", script_arg[1]), winslash = "/", mustWork = TRUE)
-  setwd(dirname(script_path))
+activate_project <- function() {
+  args_full <- commandArgs(trailingOnly = FALSE)
+  script_arg <- grep("^--file=", args_full, value = TRUE)
+  if (length(script_arg)) {
+    script_path <- normalizePath(sub("^--file=", "", script_arg[1]), winslash = "/", mustWork = TRUE)
+    setwd(dirname(script_path))
+  }
+
+  activate_path <- file.path("renv", "activate.R")
+  if (!file.exists(activate_path)) {
+    stop("Missing renv activation script at renv/activate.R. Run this from the project root or restore renv.")
+  }
+  source(activate_path, local = TRUE)
 }
 
-activate_path <- file.path("renv", "activate.R")
-if (!file.exists(activate_path)) {
-  stop("Missing renv activation script at renv/activate.R. Run this from the project root or restore renv.")
-}
-source(activate_path, local = TRUE)
-
-# --- Helper: ensure packages are available ----------------------------------
-ensure_pkg <- function(pkgs) {
-  miss <- vapply(pkgs, function(pkg) !requireNamespace(pkg, quietly = TRUE), logical(1))
-  missing_pkgs <- pkgs[miss]
+load_required_packages <- function(pkgs) {
+  missing_pkgs <- pkgs[!vapply(pkgs, requireNamespace, logical(1), quietly = TRUE)]
   if (length(missing_pkgs)) {
     stop(
       "Missing required packages: ", paste(missing_pkgs, collapse = ", "),
       "\nRun `renv::restore()` in the project to install them."
     )
   }
+
+  suppressPackageStartupMessages(
+    invisible(lapply(pkgs, library, character.only = TRUE))
+  )
 }
 
-need_pkgs <- c(
+activate_project()
+
+required_pkgs <- c(
   "mfbvar", "kofdata", "readr", "dplyr", "tidyr",
   "stringr", "zoo", "xts", "lubridate", "tibble", "ggplot2"
 )
-ensure_pkg(need_pkgs)
+load_required_packages(required_pkgs)
 
-suppressPackageStartupMessages({
-  library(mfbvar)
-  library(kofdata)
-  library(readr); library(dplyr); library(tidyr); library(stringr)
-  library(zoo); library(xts); library(lubridate); library(tibble)
-  library(ggplot2)
-})
+# --- Helpers ----------------------------------------------------------------
+quarter_to_month_end <- function(yq) {
+  end_month <- zoo::as.yearmon(yq) + (2 / 12)
+  end_date <- as.Date(end_month)
+  c(lubridate::year(end_date), lubridate::month(end_date))
+}
+
+build_q_ts <- function(q_subset) {
+  q_z <- lapply(names(q_subset)[-1], function(v) zoo::zoo(q_subset[[v]], q_subset$qtr))
+  names(q_z) <- names(q_subset)[-1]
+  lapply(q_z, stats::as.ts)
+}
+
+build_Y <- function(q_subset, baro_subset) {
+  q_ts_local <- build_q_ts(q_subset)
+  list(
+    kofbarometer = baro_subset,
+    quarterly = cbind(
+      gdp_growth = q_ts_local[["gdp_growth"]],
+      inflation  = q_ts_local[["inflation"]],
+      exch_rate  = q_ts_local[["exch_rate"]]
+    )
+  )
+}
+
+safe_rmse <- function(pred, obs) {
+  residuals <- pred - obs
+  residuals <- residuals[!is.na(residuals)]
+  if (!length(residuals)) return(NA_real_)
+  sqrt(mean(residuals^2))
+}
+
+safe_mae <- function(pred, obs) {
+  residuals <- pred - obs
+  residuals <- residuals[!is.na(residuals)]
+  if (!length(residuals)) return(NA_real_)
+  mean(abs(residuals))
+}
+
+estimate_mfvar_model <- function(Y, n_lags, n_fcst, seed = 123) {
+  set.seed(seed)
+  prior_obj <- set_prior(
+    Y = Y,
+    n_lags = n_lags,
+    n_reps = 4000,
+    n_burnin = 2000,
+    n_thin = 4,
+    n_fcst = n_fcst,
+    d = "intercept",
+    aggregation = "average",
+    check_roots = TRUE
+  )
+  estimate_mfbvar(prior_obj, prior = "minn", variance = "iw")
+}
 
 # --- I/O paths ---------------------------------------------------------------
 DATA_DIR <- file.path(".", "data")
@@ -105,10 +158,6 @@ if (!nrow(qdat)) {
   stop("No overlapping quarters between the quarterly dataset and the KOF Barometer.")
 }
 
-q_z_list <- lapply(names(qdat)[-1], function(v) zoo::zoo(qdat[[v]], qdat$qtr))
-names(q_z_list) <- names(qdat)[-1]
-q_ts <- lapply(q_z_list, stats::as.ts)
-
 # --- Align sample windows ----------------------------------------------------
 q_start <- qdat$qtr[1]
 q_start_date <- zoo::as.Date(q_start, frac = 1)
@@ -127,37 +176,103 @@ m_end <- c(q_end_year, q_end_q * 3)
 baro_ts <- stats::window(baro_ts, start = m_start_back2, end = m_end)
 
 # --- Build the mixed-frequency data list ------------------------------------
-Y <- list(
-  kofbarometer = baro_ts,
-  quarterly = cbind(
-    gdp_growth = q_ts[["gdp_growth"]],
-    inflation  = q_ts[["inflation"]],
-    exch_rate  = q_ts[["exch_rate"]]
-  )
-)
+Y <- build_Y(qdat, baro_ts)
 
 n_lags <- 5
 
-# --- Prior, estimation, and forecasting -------------------------------------
-set.seed(123)
-prior_obj <- set_prior(
-  Y = Y,
-  n_lags = n_lags,
-  n_reps = 4000,
-  n_burnin = 2000,
-  n_thin = 4,
-  n_fcst = 12,
-  d = "intercept",
-  aggregation = "average",
-  check_roots = TRUE
-)
+# --- Forecast evaluation ----------------------------------------------------
+eval_table <- NULL
+evaluation_path <- NULL
+eval_horizon <- {
+  max_holdout <- nrow(qdat) - (n_lags + 1)
+  if (max_holdout < 0) max_holdout <- 0
+  min(4, max_holdout)
+}
 
-mod_ss <- estimate_mfbvar(prior_obj, prior = "minn", variance = "iw")
+if (eval_horizon >= 1) {
+  q_train <- qdat %>% dplyr::slice_head(n = nrow(qdat) - eval_horizon)
+  q_eval <- qdat %>% dplyr::slice_tail(n = eval_horizon)
+
+  baro_train_end <- quarter_to_month_end(q_train$qtr[nrow(q_train)])
+  baro_train <- stats::window(baro_ts, end = baro_train_end)
+  Y_train <- build_Y(q_train, baro_train)
+
+  mod_eval <- estimate_mfvar_model(Y_train, n_lags, n_fcst = eval_horizon, seed = 123)
+  fc_eval_raw <- predict(mod_eval, aggregate_fcst = TRUE, pred_bands = 0.8)
+
+  fc_eval <- fc_eval_raw %>%
+    filter(variable %in% c("gdp_growth", "inflation", "exch_rate")) %>%
+    arrange(variable, time) %>%
+    group_by(variable) %>%
+    mutate(step_ahead = dplyr::row_number()) %>%
+    filter(step_ahead <= eval_horizon) %>%
+    ungroup() %>%
+    select(variable, step_ahead, mfvar = median)
+
+  actual_eval <- q_eval %>%
+    mutate(step_ahead = dplyr::row_number()) %>%
+    select(step_ahead, gdp_growth, inflation, exch_rate) %>%
+    tidyr::pivot_longer(-step_ahead, names_to = "variable", values_to = "actual")
+
+  mfvar_eval <- dplyr::inner_join(fc_eval, actual_eval, by = c("variable", "step_ahead"))
+  mfvar_metrics <- mfvar_eval %>%
+    group_by(variable) %>%
+    summarise(
+      model = "MF-VAR",
+      rmse = safe_rmse(mfvar, actual),
+      mae = safe_mae(mfvar, actual),
+      .groups = "drop"
+    )
+
+  ar_preds_list <- lapply(c("gdp_growth", "inflation", "exch_rate"), function(var) {
+    series <- q_train[[var]]
+    preds <- tryCatch({
+      fit <- stats::arima(series, order = c(2, 0, 0))
+      as.numeric(stats::predict(fit, n.ahead = eval_horizon)$pred)
+    }, error = function(e) {
+      warning(sprintf("AR(2) benchmark failed for %s: %s", var, e$message))
+      rep(NA_real_, eval_horizon)
+    })
+    tibble::tibble(variable = var, step_ahead = seq_len(eval_horizon), ar2 = preds)
+  })
+
+  ar_eval <- dplyr::bind_rows(ar_preds_list) %>%
+    dplyr::inner_join(actual_eval, by = c("variable", "step_ahead"))
+
+  ar_metrics <- ar_eval %>%
+    group_by(variable) %>%
+    summarise(
+      model = "AR(2)",
+      rmse = safe_rmse(ar2, actual),
+      mae = safe_mae(ar2, actual),
+      .groups = "drop"
+    )
+
+  eval_table <- dplyr::bind_rows(mfvar_metrics, ar_metrics) %>%
+    arrange(variable, model)
+
+  evaluation_path <- file.path(OUT_DIR, "forecast_evaluation.csv")
+  readr::write_csv(eval_table, evaluation_path)
+} else {
+  message("Evaluation skipped: not enough observations left after reserving lags.")
+}
+
+# --- Prior, estimation, and forecasting -------------------------------------
+mod_ss <- estimate_mfvar_model(Y, n_lags, n_fcst = 12, seed = 123)
 
 # --- Summaries ---------------------------------------------------------------
-sink(file.path(OUT_DIR, "mfvar_summary.txt"))
+summary_path <- file.path(OUT_DIR, "mfvar_summary.txt")
+sink(summary_path)
 cat("\n==== MF-VAR summary (Minnesota prior, IW covariance) ====\n\n")
 print(summary(mod_ss))
+
+cat("\n==== Forecast evaluation ====\n")
+if (!is.null(eval_table)) {
+  cat(sprintf("\nHoldout horizon: %d quarter(s).\n\n", eval_horizon))
+  print(eval_table, n = nrow(eval_table))
+} else {
+  cat("\nSkipped (insufficient holdout sample after reserving lags).\n")
+}
 sink()
 
 # --- Forecasts ---------------------------------------------------------------
@@ -201,11 +316,23 @@ if (nrow(fc_gdp)) {
 # --- Persist model -----------------------------------------------------------
 saveRDS(mod_ss, file.path(OUT_DIR, "mfvar_model_ss.rds"))
 
-message(
+message_lines <- c(
   "Done. Wrote:\n",
   "  - output/mfvar_summary.txt\n",
   "  - output/mfvar_forecasts_full.csv\n",
-  "  - output/mfvar_forecasts_targets.csv\n",
+  "  - output/mfvar_forecasts_targets.csv\n"
+)
+
+if (!is.null(evaluation_path)) {
+  message_lines <- c(message_lines, "  - output/forecast_evaluation.csv\n")
+} else {
+  message_lines <- c(message_lines, "  - forecast evaluation skipped (not enough holdout data)\n")
+}
+
+message_lines <- c(
+  message_lines,
   "  - output/forecast_gdp_growth.png (if GDP present)\n",
   "  - output/mfvar_model_ss.rds"
 )
+
+message(paste0(message_lines, collapse = ""))

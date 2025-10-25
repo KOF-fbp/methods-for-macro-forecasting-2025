@@ -11,3 +11,17 @@ Error covariance matrix: Inverse Wishart
 12 periods forecast
 4000 draws used in main chain
 NULL
+
+==== Forecast evaluation ====
+
+Holdout horizon: 4 quarter(s).
+
+# A tibble: 6 × 4
+  variable   model     rmse     mae
+  <chr>      <chr>    <dbl>   <dbl>
+1 exch_rate  AR(2)  0.00868 0.00757
+2 exch_rate  MF-VAR 0.0115  0.00845
+3 gdp_growth AR(2)  1.47    1.24   
+4 gdp_growth MF-VAR 0.305   0.273  
+5 inflation  AR(2)  0.467   0.422  
+6 inflation  MF-VAR 0.213   0.182  
