@@ -65,3 +65,74 @@ estimate_mfvar_model <- function(Y, n_lags, n_fcst, seed = 123) {
   )
   mfbvar::estimate_mfbvar(prior_obj, prior = "minn", variance = "iw")
 }
+
+predict_ar2 <- function(series, n_ahead, var_label = "series", context = NULL) {
+  stopifnot(n_ahead >= 1)
+  series <- series[is.finite(series)]
+  if (length(series) < 4) {
+    ctx <- if (is.null(context)) "" else sprintf(" (%s)", context)
+    warning(sprintf("AR(2)%s for %s skipped: not enough observations", ctx, var_label))
+    return(rep(NA_real_, n_ahead))
+  }
+
+  methods <- list(
+    list(name = "stats::ar YW", fit = function() stats::ar(series, order.max = 2, aic = FALSE, method = "yw")),
+    list(name = "stats::ar OLS", fit = function() stats::ar(series, order.max = 2, aic = FALSE, method = "ols")),
+    list(name = "stats::arima", fit = function() stats::arima(series, order = c(2, 0, 0), transform.pars = FALSE, optim.control = list(maxit = 2000)))
+  )
+
+  last_issue <- NULL
+
+  for (method in methods) {
+    warn_msg <- NULL
+    fit <- tryCatch(
+      withCallingHandlers(
+        method$fit(),
+        warning = function(w) {
+          warn_msg <<- conditionMessage(w)
+          invokeRestart("muffleWarning")
+        }
+      ),
+      error = function(e) {
+        last_issue <<- sprintf("%s (%s fit)", conditionMessage(e), method$name)
+        NULL
+      }
+    )
+
+    if (is.null(fit)) {
+      next
+    }
+
+    if (!is.null(warn_msg)) {
+      last_issue <- sprintf("%s (%s fit)", warn_msg, method$name)
+      next
+    }
+
+    preds <- tryCatch(
+      {
+        fc <- stats::predict(fit, n.ahead = n_ahead)
+        if (is.list(fc) && !is.null(fc$pred)) fc$pred else fc
+      },
+      error = function(e) {
+        last_issue <<- sprintf("%s (%s predict)", conditionMessage(e), method$name)
+        NULL
+      }
+    )
+
+    if (is.null(preds)) {
+      next
+    }
+
+    preds <- as.numeric(preds)
+    if (all(is.finite(preds))) {
+      return(preds)
+    }
+
+    last_issue <- sprintf("Non-finite predictions (%s)", method$name)
+  }
+
+  ctx <- if (is.null(context)) "" else sprintf(" (%s)", context)
+  msg <- if (is.null(last_issue)) "no diagnostic" else last_issue
+  warning(sprintf("AR(2)%s for %s failed: %s", ctx, var_label, msg))
+  rep(NA_real_, n_ahead)
+}

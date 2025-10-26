@@ -34,7 +34,7 @@ run_holdout_evaluation <- function(qdat, baro_ts, n_lags, target_vars, out_dir) 
     actual_eval <- q_eval |>
       dplyr::mutate(step_ahead = dplyr::row_number()) |>
       dplyr::select(step_ahead, tidyselect::all_of(target_vars)) |>
-  tidyr::pivot_longer(cols = -tidyselect::any_of("step_ahead"), names_to = "variable", values_to = "actual")
+      tidyr::pivot_longer(cols = -tidyselect::any_of("step_ahead"), names_to = "variable", values_to = "actual")
 
     mfvar_eval <- dplyr::inner_join(fc_eval, actual_eval, by = c("variable", "step_ahead"))
     mfvar_metrics <- mfvar_eval |>
@@ -48,17 +48,7 @@ run_holdout_evaluation <- function(qdat, baro_ts, n_lags, target_vars, out_dir) 
 
     ar_preds_list <- lapply(target_vars, function(var) {
       series <- q_train[[var]]
-      preds <- tryCatch({
-        fit <- stats::arima(series, order = c(2, 0, 0))
-        as.numeric(stats::predict(fit, n.ahead = eval_horizon)$pred)
-      }, warning = function(w) {
-        warning(sprintf("AR(2) warning for %s: %s", var, w$message))
-        fit <- stats::arima(series, order = c(2, 0, 0))
-        as.numeric(stats::predict(fit, n.ahead = eval_horizon)$pred)
-      }, error = function(e) {
-        warning(sprintf("AR(2) benchmark failed for %s: %s", var, e$message))
-        rep(NA_real_, eval_horizon)
-      })
+      preds <- predict_ar2(series, eval_horizon, var_label = var, context = "holdout")
       tibble::tibble(variable = var, step_ahead = seq_len(eval_horizon), ar2 = preds)
     })
 
@@ -145,19 +135,8 @@ run_cross_validation <- function(qdat, baro_ts, n_lags, target_vars, out_dir) {
         variable = target_vars,
         ar2 = vapply(target_vars, function(var) {
           series <- q_train[[var]]
-          tryCatch({
-            fit <- withCallingHandlers(
-              stats::arima(series, order = c(2, 0, 0)),
-              warning = function(w) {
-                warning(sprintf("AR(2) warning in fold %d for %s: %s", idx, var, w$message))
-                invokeRestart("muffleWarning")
-              }
-            )
-            as.numeric(stats::predict(fit, n.ahead = 1)$pred[1])
-          }, error = function(e) {
-            warning(sprintf("AR(2) benchmark failed in fold %d for %s: %s", idx, var, e$message))
-            NA_real_
-          })
+          preds <- predict_ar2(series, 1, var_label = var, context = sprintf("CV fold %d", idx))
+          preds[1]
         }, numeric(1))
       )
 

@@ -65,22 +65,6 @@ fc_targets <- fc_q |>
 readr::write_csv(fc,         file.path(OUT_DIR, "mfvar_forecasts_full.csv"))
 readr::write_csv(fc_targets, file.path(OUT_DIR, "mfvar_forecasts_targets.csv"))
 
-# --- Benchmark forecasts ----------------------------------------------------
-gdp_series <- qdat$gdp_growth
-ar2_fit <- withCallingHandlers(
-  stats::arima(gdp_series, order = c(2, 0, 0)),
-  warning = function(w) {
-    warning(sprintf("AR(2) warning for GDP forecast: %s", w$message))
-    invokeRestart("muffleWarning")
-  }
-)
-ar2_preds <- stats::predict(ar2_fit, n.ahead = 12)
-future_qtrs <- seq(qdat$qtr[nrow(qdat)] + 0.25, by = 0.25, length.out = 12)
-ar2_gdp <- tibble::tibble(
-  time = zoo::as.Date(future_qtrs, frac = 1),
-  ar2 = as.numeric(ar2_preds$pred)
-)
-
 # --- Summaries --------------------------------------------------------------
 summary_path <- file.path(OUT_DIR, "mfvar_summary.txt")
 sink(summary_path)
@@ -117,6 +101,8 @@ fc_gdp <- fc_q |>
 gdp_plot_path <- NULL
 context_plot_path <- NULL
 if (nrow(fc_gdp)) {
+  ar2_vals <- predict_ar2(qdat$gdp_growth, nrow(fc_gdp), var_label = "gdp_growth", context = "forecast horizon")
+  ar2_gdp <- tibble::tibble(time = fc_gdp$time, ar2 = ar2_vals)
   gdp_plot_path <- plot_gdp_forecasts(fc_gdp, ar2_gdp, OUT_DIR)
   context_plot_path <- plot_gdp_forecasts_with_history(fc_gdp, ar2_gdp, qdat, OUT_DIR)
 }

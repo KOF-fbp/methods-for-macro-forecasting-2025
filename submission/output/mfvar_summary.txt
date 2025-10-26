@@ -17,14 +17,14 @@ NULL
 Holdout horizon: 4 quarter(s).
 
 # A tibble: 6 × 4
-  variable   model     rmse     mae
-  <chr>      <chr>    <dbl>   <dbl>
-1 exch_rate  AR(2)  0.00868 0.00757
-2 exch_rate  MF-VAR 0.0115  0.00845
-3 gdp_growth AR(2)  1.47    1.24   
-4 gdp_growth MF-VAR 0.305   0.273  
-5 inflation  AR(2)  0.467   0.422  
-6 inflation  MF-VAR 0.213   0.182  
+  variable   model    rmse     mae
+  <chr>      <chr>   <dbl>   <dbl>
+1 exch_rate  AR(2)  0.0436 0.0414 
+2 exch_rate  MF-VAR 0.0115 0.00845
+3 gdp_growth AR(2)  1.46   1.24   
+4 gdp_growth MF-VAR 0.305  0.273  
+5 inflation  AR(2)  0.460  0.412  
+6 inflation  MF-VAR 0.213  0.182  
 
 ==== Rolling 1-step cross-validation ====
 
@@ -33,9 +33,9 @@ Folds: 8 (last 8 quarter(s)).
 # A tibble: 6 × 4
   variable   model    rmse    mae
   <chr>      <chr>   <dbl>  <dbl>
-1 exch_rate  AR(2)  0.0158 0.0124
+1 exch_rate  AR(2)  0.0211 0.0188
 2 exch_rate  MF-VAR 0.0147 0.0124
-3 gdp_growth AR(2)  1.38   1.09  
+3 gdp_growth AR(2)  1.37   1.09  
 4 gdp_growth MF-VAR 1.64   1.26  
-5 inflation  AR(2)  0.512  0.409 
+5 inflation  AR(2)  0.509  0.409 
 6 inflation  MF-VAR 0.542  0.360 
