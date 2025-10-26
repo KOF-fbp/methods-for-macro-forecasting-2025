@@ -10,7 +10,8 @@ plot_gdp_forecasts <- function(fc_gdp, ar_gdp, out_dir) {
     dplyr::mutate(time = as.Date(time))
 
   ar_df <- ar_gdp |>
-    dplyr::mutate(time = as.Date(time))
+    dplyr::mutate(time = as.Date(time)) |>
+    dplyr::filter(time <= max(plot_df$time))
 
   p <- ggplot2::ggplot(plot_df, ggplot2::aes(x = time)) +
     ggplot2::geom_ribbon(ggplot2::aes(x = time, ymin = lower, ymax = upper, fill = "MF-VAR"), alpha = 0.25, inherit.aes = FALSE) +
@@ -38,13 +39,15 @@ plot_gdp_forecasts_with_history <- function(fc_gdp, ar_gdp, qdat, out_dir) {
   history_df <- tibble::tibble(
     time = zoo::as.Date(qdat$qtr, frac = 1),
     value = qdat$gdp_growth
-  )
+  ) |>
+    dplyr::filter(time >= as.Date("2023-01-01"))
 
   forecast_df <- fc_gdp |>
     dplyr::mutate(time = as.Date(time))
 
   ar_df <- ar_gdp |>
-    dplyr::mutate(time = as.Date(time))
+    dplyr::mutate(time = as.Date(time)) |>
+    dplyr::filter(time <= max(forecast_df$time))
 
   last_actual <- max(history_df$time)
 
