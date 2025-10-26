@@ -24,36 +24,38 @@ df$date <- as.Date(paste0(df$date, "-01")) # format date
 df <- df %>% filter(date <= as.Date("2025-07-01")) # until 01.10.2025
 
 # inflate CPI to get inflation rate
-df$inflation <- (df$cpi - dplyr::lag(df$cpi, 1)) / dplyr::lag(df$cpi, 1) 
+df$inflation <- 100*(df$cpi - dplyr::lag(df$cpi, 1)) / dplyr::lag(df$cpi, 1) 
 df <- df %>% filter(!is.na(inflation)) #remove first NA row
 
+# gdp growth instead of gdp
+df$gdp <- log(df$gdp)
 # -------------------- apply log + growth transformations --------------------
 # define the rate variables (do NOT log-transform these)
 rate_variables <- c("inflation", "urilo", "srate", "srate_ge")
 
 # safe log: add small offset if non-positive values present
-safe_log <- function(x, tiny = 1e-6) {
-  x_num <- as.numeric(x)
-  if (all(is.na(x_num))) return(x_num)
-  if (any(x_num <= 0, na.rm = TRUE)) {
-    offset <- abs(min(x_num, na.rm = TRUE)) + tiny
-    warning("Non-positive values found; adding offset = ", signif(offset, 6), " before log.")
-    x_num <- x_num + offset
-  }
-  return(log(x_num))
-}
+#safe_log <- function(x, tiny = 1e-6) {
+#  x_num <- as.numeric(x)
+#  if (all(is.na(x_num))) return(x_num)
+#  if (any(x_num <= 0, na.rm = TRUE)) {
+#    offset <- abs(min(x_num, na.rm = TRUE)) + tiny
+#    warning("Non-positive values found; adding offset = ", signif(offset, 6), " before log.")
+#    x_num <- x_num + offset
+#  }
+#  return(log(x_num))
+#}
 
 # apply log to non-rate variables (excluding date)
-for (var in names(df)) {
-  if (!(var %in% rate_variables) && var != "date") {
-    df[[var]] <- safe_log(df[[var]])
-  }
-}
+# (var in names(df)) {
+#  if (!(var %in% rate_variables) && var != "date") {
+#    df[[var]] <- safe_log(df[[var]])
+#  }
+#}
 
 # convert to growth rates (percent) for the same non-rate variables
 for (var in names(df)) {
   if (!(var %in% rate_variables) && var != "date") {
-    df[[var]] <- 100 * (df[[var]] - dplyr::lag(df[[var]], 1))
+    df[[var]] <-  (df[[var]] - dplyr::lag(df[[var]], 1))
   }
 }
 
@@ -61,49 +63,53 @@ for (var in names(df)) {
 # (subsequent code already removes rows with NA in gdp)
 
 #check if stationary using functions from stationary.R
-for (var in setdiff(colnames(df), "date")) {  # excluding date column
-  cat("Checking stationarity for:", var, "\n")
-  ts_data <- ts(df[[var]])
-  stationary_ts <- make_stationary(ts_data, use_log = TRUE)   # returns aligned vector (same length)
-  df[[var]] <- as.numeric(stationary_ts)                     # assign directly, no extra NA
-}
+#for (var in setdiff(colnames(df), "date")) {  # excluding date column
+#  cat("Checking stationarity for:", var, "\n")
+#  ts_data <- ts(df[[var]])
+#  stationary_ts <- make_stationary(ts_data, use_log = TRUE)   # returns aligned vector (same length)
+#  df[[var]] <- as.numeric(stationary_ts)                     # assign directly, no extra NA
+#}
 df <- df %>% filter(!is.na(gdp))  # remove first row with NA
 
 # ---------------------- lags ---------------------#
 
 # possible lags: 1, 4 (one year), 8 (two years)
-lags <- c(1, 4)
+lags <- c(1,4)
 
+#plot the forecast variables
+fv <- c("gdp", "inflation", "wkfreuro")
+
+for (v in fv){
+  plot(df[,v])
+}
 
 # ------------------ selected variables ------------------#
 
 #selected variables for BVAR model
 
-selected_variables_1 <- c("gdp", "cpi", "wkfreuro", "consp", "consg", 
+selected_variables_0 <- c("gdp", "inflation", "wkfreuro")
+
+selected_variables_1 <- c("gdp", "inflation", "wkfreuro", "consp", "consg", 
                           "ifix", "icnstr", "ime", "exc1", "imc1", "ltot", "uroff", "wage", 
-                          "srate", "poilusd", "wd", "pcioecd", "vaabcde", "vaghji")
+                          "srate", "poilusd", "pcioecd", "vaabcde", "vaghji")
 
 #from this initial set, we will also try a smaller set of variables
 
-selected_variables_2 <- c("gdp", "cpi", "wkfreuro", "consp", "consg", "ifix", 
+selected_variables_2 <- c("gdp", "inflation", "wkfreuro", "consp", "consg", "ifix", 
                           "exc1", "imc1", "ltot", "uroff", "wage", "srate", 
-                          "poilusd", "wd", "pcioecd")
+                          "poilusd", "pcioecd")
 
-selected_variables_3 <- c("gdp", "cpi", "wkfreuro", "consp", "exc1", "ltot",
+selected_variables_3 <- c("gdp", "inflation", "wkfreuro", "consp", "exc1", "ltot",
                           "wage", "srate")
 
 #-------------------------------------------------------------------
 # List of variable sets to test
 variable_sets <- list(
+  set_0 = selected_variables_0,
   set_1 = selected_variables_1,
   set_2 = selected_variables_2,
   set_3 = selected_variables_3
 )
-
-
-
-
-
 
 #--------------------- priors ---------------------#
 # Define different prior configurations to test
@@ -135,7 +141,7 @@ mn_prior_bv <- bv_priors(
 )
 
 soc_prior_bv <- bv_priors(
-  hyper = c("lambda", "alpha", "psi"),
+  hyper = c("lambda", "alpha"),
   mn = mn,
   soc = soc
 )
@@ -143,11 +149,11 @@ soc_prior_bv <- bv_priors(
 # Lista di prior pronta per essere passata a BVAR::bvar
 prior_configs <- list(
   mn      = mn_prior_bv,
-  soc     = soc_prior_bv,
-  diffuse = diffuse_prior_bv
+  soc     = soc_prior_bv
+ #diffuse = diffuse_prior_bv
 )
 
-rolling_window_size <- 40  # e.g., 40 quarters (10 years)
+rolling_window_size <- 80  # e.g., 40 quarters (10 years)
 
 #---------------------- end of setup ---------------------#
 compute_bvar_rmse <- function(data, variables, lags, prior, model_type = c("bvar", "var")) {
@@ -261,31 +267,126 @@ compute_bvar_rmse <- function(data, variables, lags, prior, model_type = c("bvar
   return(overall_rmse)
 }
 
+compute_bvar_rmse <- function(data, variables, lags, prior, window_size){
+  
+  horizon <- 1
+
+  n_obs <- nrow(data)
+
+  quantile_bands <- c("2.5%", "16%", "50%", "84%", "97.5%")
+  # building a matrix to save results of q50
+  forecast_variables <- c("gdp", "inflation", "wkfreuro")
+
+  pred_q50 <- matrix(NA_real_, nrow = n_obs, ncol = length(variables),
+                     dimnames = list(NULL, variables))
+  
+  for (i in seq(from = window_size + lags, to = n_obs - horizon)) {
+    
+    train_start <- i - window_size + 1
+    train_end <- i
+    
+    # select the data for the rolling window
+    y_train <- data[train_start:train_end, ]
+    
+    # fitting model
+    invisible(trained_model <- bvar(
+      y_train %>% dplyr::select(all_of(variables)),
+      lags = lags,
+      n_draw = 10000,
+      n_burn = 2500,
+      n_thin = 1,
+      priors = prior,
+      verbose = FALSE
+    ))
+    
+    
+    prediction <- predict(trained_model, horizon = horizon, conf_bands = c(0.16, 0.025))
+    
+    # extract quantiles
+    pred_quants <- prediction$quants
+    mat <- matrix(NA_real_, nrow = length(variables), ncol = length(quantile_bands),
+                  dimnames = list(variables, quantile_bands))
+    
+    for (j in seq_along(variables)) {
+      mat[j, ] <- pred_quants[, 1, j]
+    }
+    
+    # save the results
+    results <- as_tibble(mat, rownames = "variable") %>%
+      rename(
+        q025 = `2.5%`,
+        q16  = `16%`,
+        q50  = `50%`,
+        q84  = `84%`,
+        q975 = `97.5%`
+      )
+  
+    pred_q50[i+1, ] <- results$q50
+    
+  }
+
+  # create a data frame with results (one column for variable, one for rmse one
+  res <- data.frame(
+    variable = forecast_variables,
+    rmse = numeric(length(forecast_variables))
+  )
+  
+  for (i in seq_along(forecast_variables)) {
+    
+    var <- forecast_variables[i]
+
+    cat(var, ": rmse: " )
+    valid_indices <- which(!is.na(pred_q50[, var]))
+    rmse <- sqrt(mean((pred_q50[valid_indices, var] - data[valid_indices, var])^2))
+    mae <- mean(abs(pred_q50[valid_indices, var] - data[valid_indices, var]))
+    
+    cat(rmse, "\n")
+    
+    res$rmse[i] <- rmse
+    
+  }
+  
+  return(res)
+}
+
 
 #–-------------------- BVAR/VAR RMSE computation ---------------------#
 
-results <- list()
+# data frame for results always add the new results at the end of the df, but also add columns with lags, variable set and prior used
 
+results_df <- data.frame(
+  variable = character(),
+  rmse = numeric(),
+  lags = integer(),
+  variable_set = character(),
+  prior = character(),
+  stringsAsFactors = FALSE
+)
 for (lag in lags) {
-  print(paste("Testing lag:", lag))
+  #print(paste("Testing lag:", lag))
   for (var_set_name in names(variable_sets)) {
+    #cat("testing: ", var_set_name)
     selected_vars <- variable_sets[[var_set_name]]
     
     for (prior_name in names(prior_configs)) {
+      cat("testing: ", lag, " ", var_set_name, " ",prior_name, "\n")
       prior_config <- prior_configs[[prior_name]]
       
-      model_type <- if (prior_name == "diffuse") "var" else "bvar"
-      
-      rmse_result <- compute_bvar_rmse(
+      temp_results <- compute_bvar_rmse(
         data = df,
         variables = selected_vars,
         lags = lag,
         prior = prior_config,
-        model_type = model_type
+        window_size = rolling_window_size
       )
+      temp_results$lags <- lag
+      temp_results$variable_set <- var_set_name
+      temp_results$prior <- prior_name
+      results_df <- rbind(results_df, temp_results)
       
-      results[[paste(lag, var_set_name, prior_name, sep = "_")]] <- rmse_result
-      print(paste("Lag:", lag, "Variable Set:", var_set_name, "Prior:", prior_name, "Model:", model_type, "RMSE:", rmse_result))
     }
   }
 }
+
+results_df
+
