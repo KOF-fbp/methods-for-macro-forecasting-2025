@@ -54,12 +54,13 @@ fc_q <- fc |>
     ),
     median = dplyr::if_else(variable == "exch_rate", exp(median), median),
     lower  = dplyr::if_else(variable == "exch_rate", exp(lower), lower),
-    upper  = dplyr::if_else(variable == "exch_rate", exp(upper), upper)
+    upper  = dplyr::if_else(variable == "exch_rate", exp(upper), upper),
+    quarter_end = zoo::as.Date(zoo::as.yearqtr(fcst_date), frac = 1)
   )
 
 fc_targets <- fc_q |>
   dplyr::filter(!is.na(horizon)) |>
-  dplyr::select(variable, horizon, time, median, lower, upper)
+  dplyr::select(variable, horizon, quarter_end, median, lower, upper)
 
 readr::write_csv(fc,         file.path(OUT_DIR, "mfvar_forecasts_full.csv"))
 readr::write_csv(fc_targets, file.path(OUT_DIR, "mfvar_forecasts_targets.csv"))
@@ -106,7 +107,12 @@ sink()
 # --- Plots ------------------------------------------------------------------
 fc_gdp <- fc_q |>
   dplyr::filter(variable == "gdp_growth") |>
-  dplyr::select(time, lower, median, upper)
+  dplyr::transmute(
+    time = quarter_end,
+    lower = lower,
+    median = median,
+    upper = upper
+  )
 
 gdp_plot_path <- NULL
 context_plot_path <- NULL
