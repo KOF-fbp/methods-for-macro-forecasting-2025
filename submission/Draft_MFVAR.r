@@ -108,7 +108,7 @@ if (!is.null(cv_results$table)) {
 sink()
 
 # --- Plots ------------------------------------------------------------------
-# Visualise the GDP path relative to the AR(2) benchmark when forecasts exist.
+# Visualise each target relative to the AR(2) benchmark when forecasts exist.
 fc_gdp <- fc_q |>
   dplyr::filter(variable == "gdp_growth") |>
   dplyr::transmute(
@@ -118,13 +118,50 @@ fc_gdp <- fc_q |>
     upper = upper
   )
 
+fc_infl <- fc_q |>
+  dplyr::filter(variable == "inflation") |>
+  dplyr::transmute(
+    time = quarter_end,
+    lower = lower,
+    median = median,
+    upper = upper
+  )
+
+fc_exch <- fc_q |>
+  dplyr::filter(variable == "exch_rate") |>
+  dplyr::transmute(
+    time = quarter_end,
+    lower = lower,
+    median = median,
+    upper = upper
+  )
+
 gdp_plot_path <- NULL
-context_plot_path <- NULL
+gdp_context_path <- NULL
+inflation_plot_path <- NULL
+inflation_context_path <- NULL
+exch_plot_path <- NULL
+exch_context_path <- NULL
+
 if (nrow(fc_gdp)) {
   ar2_vals <- predict_ar2(qdat$gdp_growth, nrow(fc_gdp), var_label = "gdp_growth", context = "forecast horizon")
   ar2_gdp <- tibble::tibble(time = fc_gdp$time, ar2 = ar2_vals)
   gdp_plot_path <- plot_gdp_forecasts(fc_gdp, ar2_gdp, OUT_DIR)
-  context_plot_path <- plot_gdp_forecasts_with_history(fc_gdp, ar2_gdp, qdat, OUT_DIR)
+  gdp_context_path <- plot_gdp_forecasts_with_history(fc_gdp, ar2_gdp, qdat, OUT_DIR)
+}
+
+if (nrow(fc_infl)) {
+  ar2_vals <- predict_ar2(qdat$inflation, nrow(fc_infl), var_label = "inflation", context = "forecast horizon")
+  ar2_infl <- tibble::tibble(time = fc_infl$time, ar2 = ar2_vals)
+  inflation_plot_path <- plot_inflation_forecasts(fc_infl, ar2_infl, OUT_DIR)
+  inflation_context_path <- plot_inflation_forecasts_with_history(fc_infl, ar2_infl, qdat, OUT_DIR)
+}
+
+if (nrow(fc_exch)) {
+  ar2_vals <- predict_ar2(qdat$exch_rate, nrow(fc_exch), var_label = "exch_rate", context = "forecast horizon")
+  ar2_exch <- tibble::tibble(time = fc_exch$time, ar2 = exp(ar2_vals))
+  exch_plot_path <- plot_exch_rate_forecasts(fc_exch, ar2_exch, OUT_DIR)
+  exch_context_path <- plot_exch_rate_forecasts_with_history(fc_exch, ar2_exch, qdat, OUT_DIR)
 }
 
 # --- Persist model ----------------------------------------------------------
@@ -157,8 +194,20 @@ if (!is.null(cv_results$folds_path)) {
 if (!is.null(gdp_plot_path)) {
   message_lines <- c(message_lines, "  - output/forecast_gdp_growth.png\n")
 }
-if (!is.null(context_plot_path)) {
+if (!is.null(gdp_context_path)) {
   message_lines <- c(message_lines, "  - output/forecast_gdp_growth_context.png\n")
+}
+if (!is.null(inflation_plot_path)) {
+  message_lines <- c(message_lines, "  - output/forecast_inflation.png\n")
+}
+if (!is.null(inflation_context_path)) {
+  message_lines <- c(message_lines, "  - output/forecast_inflation_context.png\n")
+}
+if (!is.null(exch_plot_path)) {
+  message_lines <- c(message_lines, "  - output/forecast_exchange_rate.png\n")
+}
+if (!is.null(exch_context_path)) {
+  message_lines <- c(message_lines, "  - output/forecast_exchange_rate_context.png\n")
 }
 
 message_lines <- c(
