@@ -1,34 +1,34 @@
 # Copilot Instructions
 
-## Project scope
-- Mixed-frequency Bayesian VAR for Swiss macro forecasting; heavy lifting in `Draft_MFVAR.r`.
-- Combines quarterly KOF forecast CSV (`data/data_quarterly.csv`) with live monthly KOF Barometer via `kofdata`.
+## Overview
+- Mixed-frequency Bayesian VAR pipeline for Swiss macro indicators driven by `Draft_MFVAR.r`; helper modules live under `R/`.
+- Core outputs land in `output/`: forecasts (`mfvar_forecasts_full.csv`, `mfvar_forecasts_targets.csv`), evaluation tables, `mfvar_summary.txt`, optional GDP plots, and `mfvar_model_ss.rds`.
+- `main.R` is a Docker/CI smoke test only; concentrate workflow changes in `Draft_MFVAR.r` and `R/` helpers.
 
-## Key scripts
-- `Draft_MFVAR.r`: end-to-end pipeline from data ingest to forecasts; keep the sequence of transformations (quarterly derive -> align monthly) intact because later steps assume those column names.
-- `main.R`: minimal smoke test used by Docker/CI to confirm renv activation and plotting; do not rely on it for production outputs.
+## Data & Inputs
+- Quarterly history comes from `data/data_quarterly.csv` and must retain columns `date`, `rvgdp`, `cpi`, `wkfreuro` (`%Y-%m` strings); ingestion stops if any are missing.
+- `R/data_processing.R` transforms the CSV into quarterly growth/log series (`gdp_growth`, `inflation`, `exch_rate`) and drops the leading NA; keep column names stable for downstream joins.
+- Monthly KOF Barometer is fetched via `kofdata::get_time_series()` (tries `kofbarometer`, then `ch.kof.barometer`); provide a cached `ts` in `fetch_kof_barometer()` when offline.
+- `trim_to_overlap()` and `window_baro()` align frequencies by truncating quarters beyond available barometer data and backfilling two months before the sample start; validate these before altering priors.
+- Update `data/metadata_quarterly*.csv` whenever quarterly fields change to keep provenance records accurate.
 
-## Data expectations
-- Quarterly CSV must expose columns `date`, `rvgdp`, `cpi`, `wkfreuro` (ISO month string, real GDP, CPI, EUR/CHF); script stops otherwise.
-- Metadata files (`data/metadata_quarterly*.csv`) describe provenance; update alongside new or renamed columns.
-- Forecast horizon alignment uses `zoo::as.yearqtr`; keep dates in `%Y-%m` format to avoid parsing failures.
+## Code Structure
+- `R/setup.R` enforces `renv` activation (`renv/activate.R`) and loads required packages (`mfbvar`, `kofdata`, tidyverse stack); run `renv::restore()` before executing scripts or adding dependencies.
+- `Draft_MFVAR.r` follows a strict sequence: ingest -> align -> evaluations -> model estimation -> persistence. Preserve object names (`qdat`, `baro_ts`, `Y`) because later stages reuse them without recomputation.
+- `build_Y()` returns the structure expected by `mfbvar::set_prior`: list with `kofbarometer` (`ts`) and `quarterly` (`ts` matrix). Keep quarterly column names when extending targets.
+- `estimate_mfvar_model()` fixes Minnesota/IW prior hyperparameters (`n_reps = 4000`, `n_burnin = 2000`, `n_thin = 4`, `aggregation = "average"`); adjust these jointly if you change lag length or forecast horizon.
+- Evaluation helpers (`run_holdout_evaluation()`, `run_cross_validation()`) benchmark MF-VAR against an AR(2) built via `predict_ar2()` which cycles through Yule-Walker, OLS, and ARIMA fits; retain fallbacks to keep robustness.
+- Plotting utilities expect tidy columns `lower/median/upper` and actual GDP history filtered to 2023+; reuse those conventions for new visuals.
 
-## External dependencies
-- `renv` is mandatory (`.Rprofile` auto-activates); run `renv::restore()` before executing scripts or installing packages.
-- The script installs missing CRAN deps at runtime; prefer adding packages to `renv.lock` via `renv::install()` to keep builds deterministic.
-- `kofdata::get_time_series()` hits the KOF API; ensure network access or provide a cached `ts` stub inside `Draft_MFVAR.r` when offline.
+## Running & Debugging
+- Execute `Rscript Draft_MFVAR.r` from the project root; the script resets `setwd()` based on `commandArgs()` so relative paths remain valid.
+- Inspect `output/mfvar_summary.txt` for convergence diagnostics (`summary(mod_ss)` output) plus evaluation tables. Forecast CSVs contain both raw monthly aggregation and tagged target horizons.
+- Holdout horizon is `min(4, nrow(qdat) - (n_lags + 1))`; increasing `n_lags` shortens evaluation samples, so coordinate adjustments with stakeholders.
+- Cross-validation iterates over the last `cv_horizon` quarters (`min(8, nrow(qdat) - (n_lags + 2))`); failures emit warnings but should not abort the main run.
+- Network outages surface early in `fetch_kof_barometer()`; fail fast and consider stubbing with `ts()` if needed for offline testing.
 
-## Workflow
-- Primary entrypoint: `Rscript Draft_MFVAR.r`; outputs land in `output/` (`mfvar_summary.txt`, forecast CSVs, optional GDP plot, serialized `mfvar_model_ss.rds`).
-- Model prior uses `set_prior(..., n_reps = 4000, n_burnin = 2000, n_thin = 4)`; adjust together to keep effective samples stable.
-- Mixed-frequency aggregation matrix comes from `mfbvar:::build_Lambda`; update `aggregation_vec` and `n_lags` in tandem.
-
-## Validation and debugging
-- Inspect generated `output/mfvar_summary.txt` for convergence diagnostics; `summary(mod_ss)` is the single authoritative check.
-- When forecasts look off, confirm barometer alignment (`m_start_back2`, `baro_ts` window) before tweaking priors.
-- Enable verbose logging by temporarily removing `suppressPackageStartupMessages()` during debugging.
-
-## Contribution tips
-- Keep new code vectorized and rely on `dplyr` verbs; the pipeline expects tidy data frames.
-- Prefer writing helper functions inside the script rather than new files unless logic is shared elsewhere, to avoid fragmenting the single-script workflow.
-- Mirror existing messaging style (`message()` footer) so downstream automation can continue to detect completion.
+## Contribution Patterns
+- Work within tidyverse pipelines; shared global variables are declared via `utils::globalVariables()` to appease R CMD check.
+- Add new forecast targets by editing `target_variables` in `R/setup.R`, ensuring the quarterly dataset exposes the same columns and evaluations/plots reference them.
+- Keep helper logic centralized in existing modules; automation relies on `Draft_MFVAR.r` emitting the final `message()` footer to detect completion.
+- When introducing packages, prefer `renv::install()` so `renv.lock` stays authoritative; avoid runtime installs inside scripts.

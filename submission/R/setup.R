@@ -1,6 +1,8 @@
 # Project setup utilities
 
 activate_project <- function() {
+  # When invoked via Rscript, set the working directory to the script location
+  # so relative paths remain consistent when sourcing helpers.
   args_full <- commandArgs(trailingOnly = FALSE)
   script_arg <- grep("^--file=", args_full, value = TRUE)
   if (length(script_arg)) {
@@ -16,6 +18,7 @@ activate_project <- function() {
 }
 
 load_required_packages <- function(pkgs) {
+  # Fail fast if any dependency is missing, instructing users to restore via renv.
   missing_pkgs <- pkgs[!vapply(pkgs, requireNamespace, logical(1), quietly = TRUE)]
   if (length(missing_pkgs)) {
     stop(
@@ -51,6 +54,7 @@ safe_mae <- function(pred, obs) {
 }
 
 estimate_mfvar_model <- function(Y, n_lags, n_fcst, seed = 123) {
+  # Configure Minnesota/IW priors and sample the MF-VAR posterior.
   set.seed(seed)
   prior_obj <- mfbvar::set_prior(
     Y = Y,
@@ -76,6 +80,8 @@ predict_ar2 <- function(series, n_ahead, var_label = "series", context = NULL) {
   }
 
   methods <- list(
+    # Cycle through Yule-Walker, OLS, and ARIMA flavours; later attempts only
+    # run when earlier ones fail to provide usable predictions.
     list(name = "stats::ar YW", fit = function() stats::ar(series, order.max = 2, aic = FALSE, method = "yw")),
     list(name = "stats::ar OLS", fit = function() stats::ar(series, order.max = 2, aic = FALSE, method = "ols")),
     list(name = "stats::arima", fit = function() stats::arima(series, order = c(2, 0, 0), transform.pars = FALSE, optim.control = list(maxit = 2000)))

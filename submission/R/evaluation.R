@@ -1,17 +1,21 @@
 # Forecast evaluation utilities
 
+utils::globalVariables(c("variable", "step_ahead", "mfvar", "actual", "ar2", "fold_index", "model"))
+
 variable <- step_ahead <- mfvar <- actual <- ar2 <- fold_index <- NULL
 
 run_holdout_evaluation <- function(qdat, baro_ts, n_lags, target_vars, out_dir) {
   eval_table <- NULL
   evaluation_path <- NULL
   eval_horizon <- {
+    # Keep at most four quarters for evaluation to align with a 1-year horizon.
     max_holdout <- nrow(qdat) - (n_lags + 1)
     if (max_holdout < 0) max_holdout <- 0
     min(4, max_holdout)
   }
 
   if (eval_horizon >= 1) {
+    # Split data into estimation and holdout blocks.
     q_train <- qdat |> dplyr::slice_head(n = nrow(qdat) - eval_horizon)
     q_eval <- qdat |> dplyr::slice_tail(n = eval_horizon)
 
@@ -19,6 +23,7 @@ run_holdout_evaluation <- function(qdat, baro_ts, n_lags, target_vars, out_dir) 
     baro_train <- stats::window(baro_ts, end = baro_train_end)
     Y_train <- build_Y(q_train, baro_train)
 
+    # Forecast the holdout window with the MF-VAR.
     mod_eval <- estimate_mfvar_model(Y_train, n_lags, n_fcst = eval_horizon, seed = 123)
     fc_eval_raw <- predict(mod_eval, aggregate_fcst = TRUE, pred_bands = 0.8)
 
@@ -83,8 +88,10 @@ run_holdout_evaluation <- function(qdat, baro_ts, n_lags, target_vars, out_dir) 
 run_cross_validation <- function(qdat, baro_ts, n_lags, target_vars, out_dir) {
   cv_table <- NULL
   cv_path <- NULL
+  folds_path <- NULL
   cv_folds <- 0
   cv_horizon <- {
+    # Limit cross-validation to the last eight quarters to keep folds balanced.
     max_cv <- nrow(qdat) - (n_lags + 2)
     if (max_cv < 0) max_cv <- 0
     min(8, max_cv)
@@ -102,6 +109,7 @@ run_cross_validation <- function(qdat, baro_ts, n_lags, target_vars, out_dir) {
         next
       }
 
+      # Leave the last observation out for testing and forecast 1-step ahead.
       q_train <- qdat |> dplyr::slice_head(n = train_rows)
       q_test <- qdat |> dplyr::slice(idx)
 
@@ -150,6 +158,7 @@ run_cross_validation <- function(qdat, baro_ts, n_lags, target_vars, out_dir) {
     if (nrow(cv_results)) {
       cv_folds <- dplyr::n_distinct(cv_results$fold_index)
 
+      # Aggregate fold-level errors into RMSE/MAE per target and model.
       mfvar_cv <- cv_results |>
         dplyr::group_by(variable) |>
         dplyr::summarise(
@@ -172,7 +181,10 @@ run_cross_validation <- function(qdat, baro_ts, n_lags, target_vars, out_dir) {
         dplyr::arrange(variable, model)
 
       cv_path <- file.path(out_dir, "forecast_cross_validation.csv")
-      readr::write_csv(cv_results, cv_path)
+      readr::write_csv(cv_table, cv_path)
+
+      folds_path <- file.path(out_dir, "forecast_cross_validation_folds.csv")
+      readr::write_csv(cv_results, folds_path)
     } else {
       message("Cross-validation skipped: no valid folds produced.")
     }
@@ -184,6 +196,7 @@ run_cross_validation <- function(qdat, baro_ts, n_lags, target_vars, out_dir) {
     table = cv_table,
     folds = cv_folds,
     horizon = cv_horizon,
-    path = cv_path
+    path = cv_path,
+    folds_path = folds_path
   )
 }

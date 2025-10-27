@@ -1,5 +1,7 @@
 # Data ingestion and transformation utilities
 
+utils::globalVariables(c(".data", "qtr", "rvgdp", "cpi", "wkfreuro", "gdp_growth", "inflation", "exch_rate"))
+
 qtr <- rvgdp <- cpi <- wkfreuro <- gdp_growth <- inflation <- exch_rate <- NULL
 
 read_quarterly_data <- function(data_dir) {
@@ -13,16 +15,18 @@ read_quarterly_data <- function(data_dir) {
     stop("Missing expected columns in quarterly CSV: ", paste(missing, collapse = ", "))
   }
 
+  # Build quarterly growth/log levels, drop the first NA induced by lagging, and
+  # retain only the series needed by the MF-VAR.
   qraw |>
-    dplyr::mutate(qtr = zoo::as.yearqtr(date, format = "%Y-%m")) |>
-    dplyr::arrange(qtr) |>
+    dplyr::mutate(qtr = zoo::as.yearqtr(.data$date, format = "%Y-%m")) |>
+    dplyr::arrange(.data$qtr) |>
       dplyr::mutate(
-        gdp_growth = 400 * (log(rvgdp) - dplyr::lag(log(rvgdp))),
-        inflation  = 400 * (log(cpi) - dplyr::lag(log(cpi))),
-        exch_rate  = log(wkfreuro)
+        gdp_growth = 400 * (log(.data$rvgdp) - dplyr::lag(log(.data$rvgdp))),
+        inflation  = 400 * (log(.data$cpi) - dplyr::lag(log(.data$cpi))),
+        exch_rate  = log(.data$wkfreuro)
       ) |>
       tidyr::drop_na() |>
-      dplyr::select(qtr, gdp_growth, inflation, exch_rate)
+      dplyr::select(dplyr::all_of(c("qtr", "gdp_growth", "inflation", "exch_rate")))
 }
 
 fetch_kof_barometer <- function() {
@@ -38,6 +42,7 @@ fetch_kof_barometer <- function() {
     stop("Could not download KOF Barometer via 'kofdata' (tried keys 'kofbarometer' and 'ch.kof.barometer').")
   }
 
+  # Center the barometer and return it as a monthly ts object for aggregation.
   stats::ts(
     as.numeric(baro_ts) - mean(as.numeric(baro_ts), na.rm = TRUE),
     start = stats::start(baro_ts),
@@ -56,7 +61,7 @@ trim_to_overlap <- function(qdat, baro_ts) {
   }
   q_cutoff <- zoo::as.yearqtr(sprintf("%d Q%d", last_q_year, last_q_num))
   qdat <- qdat |>
-    dplyr::filter(qtr <= q_cutoff)
+    dplyr::filter(.data$qtr <= q_cutoff)
   if (!nrow(qdat)) {
     stop("No overlapping quarters between the quarterly dataset and the KOF Barometer.")
   }
@@ -64,6 +69,7 @@ trim_to_overlap <- function(qdat, baro_ts) {
 }
 
 quarter_to_month_end <- function(yq) {
+  # Convert a year-quarter stamp to the corresponding month-end indices.
   end_month <- zoo::as.yearmon(yq) + (2 / 12)
   end_date <- as.Date(end_month)
   c(lubridate::year(end_date), lubridate::month(end_date))
@@ -76,6 +82,7 @@ build_q_ts <- function(q_subset) {
 }
 
 build_Y <- function(q_subset, baro_subset) {
+  # Arrange inputs into the mfbvar::set_prior structure.
   q_ts_local <- build_q_ts(q_subset)
   list(
     kofbarometer = baro_subset,
@@ -102,5 +109,6 @@ window_baro <- function(baro_ts, qdat) {
   q_end_year <- lubridate::year(q_end_date)
   q_end_q <- lubridate::quarter(q_end_date)
   m_end <- c(q_end_year, q_end_q * 3)
+  # Extend two months before the sample start so the ragged-edge aggregation works.
   stats::window(baro_ts, start = m_start_back2, end = m_end)
 }
