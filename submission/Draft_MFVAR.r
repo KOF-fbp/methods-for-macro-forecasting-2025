@@ -22,6 +22,7 @@ OUT_DIR  <- file.path(".", "output")
 if (!dir.exists(OUT_DIR)) dir.create(OUT_DIR, recursive = TRUE)
 
 # --- Data preparation -------------------------------------------------------
+# Pull the transformed quarterly series and aligned barometer input.
 qdat_raw <- read_quarterly_data(DATA_DIR)
 baro_raw <- fetch_kof_barometer()
 trimmed <- trim_to_overlap(qdat_raw, baro_raw)
@@ -33,10 +34,14 @@ target_vars <- target_variables
 n_lags <- 5
 
 # --- Evaluation suites ------------------------------------------------------
+# Benchmark MF-VAR forecasts against AR(2) both on a holdout window and
+# in rolling one-step-ahead cross-validation.
 holdout_results <- run_holdout_evaluation(qdat, baro_ts, n_lags, target_vars, OUT_DIR)
 cv_results <- run_cross_validation(qdat, baro_ts, n_lags, target_vars, OUT_DIR)
 
 # --- Estimation and forecasting --------------------------------------------
+# Refit the MF-VAR on the full sample and produce 12 quarter-ahead forecasts
+# (sufficient to cover the 1-year horizon after aggregation).
 mod_ss <- estimate_mfvar_model(Y, n_lags, n_fcst = 12, seed = 123)
 
 fc <- predict(mod_ss, aggregate_fcst = TRUE, pred_bands = 0.8)
@@ -52,6 +57,7 @@ fc_q <- fc |>
       step_ahead == 4 ~ "1-year ahead",
       TRUE ~ NA_character_
     ),
+    # Convert exchange-rate forecasts back to levels for reporting only.
     median = dplyr::if_else(variable == "exch_rate", exp(median), median),
     lower  = dplyr::if_else(variable == "exch_rate", exp(lower), lower),
     upper  = dplyr::if_else(variable == "exch_rate", exp(upper), upper),
@@ -60,6 +66,19 @@ fc_q <- fc |>
 
 fc_targets <- fc_q |>
   dplyr::filter(!is.na(horizon)) |>
+  dplyr::select(variable, step_ahead, horizon, quarter_end, median, lower, upper)
+
+# Confirm we produced both the 1-step and 1-year forecasts for every target.
+expected_horizons <- tidyr::expand_grid(variable = target_vars, step_ahead = c(1L, 4L))
+missing_targets <- expected_horizons |>
+  dplyr::anti_join(fc_targets, by = c("variable", "step_ahead"))
+
+if (nrow(missing_targets)) {
+  missing_msg <- paste(missing_targets$variable, paste0("step ", missing_targets$step_ahead), collapse = ", ")
+  warning(sprintf("Forecast table is missing required horizons: %s", missing_msg))
+}
+
+fc_targets <- fc_targets |>
   dplyr::select(variable, horizon, quarter_end, median, lower, upper)
 
 readr::write_csv(fc,         file.path(OUT_DIR, "mfvar_forecasts_full.csv"))
@@ -89,6 +108,7 @@ if (!is.null(cv_results$table)) {
 sink()
 
 # --- Plots ------------------------------------------------------------------
+# Visualise the GDP path relative to the AR(2) benchmark when forecasts exist.
 fc_gdp <- fc_q |>
   dplyr::filter(variable == "gdp_growth") |>
   dplyr::transmute(
@@ -128,6 +148,10 @@ if (!is.null(cv_results$path)) {
   message_lines <- c(message_lines, "  - output/forecast_cross_validation.csv\n")
 } else {
   message_lines <- c(message_lines, "  - cross-validation skipped or unavailable\n")
+}
+
+if (!is.null(cv_results$folds_path)) {
+  message_lines <- c(message_lines, "  - output/forecast_cross_validation_folds.csv\n")
 }
 
 if (!is.null(gdp_plot_path)) {
