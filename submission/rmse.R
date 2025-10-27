@@ -153,7 +153,7 @@ prior_configs <- list(
  #diffuse = diffuse_prior_bv
 )
 
-rolling_window_size <- 80  # e.g., 40 quarters (10 years)
+rolling_window_size <- 110  # e.g., 40 quarters (10 years)
 
 #---------------------- end of setup ---------------------#
 compute_bvar_rmse <- function(data, variables, lags, prior, model_type = c("bvar", "var")) {
@@ -389,4 +389,6 @@ for (lag in lags) {
 }
 
 results_df
+# save results to the output folder
+save(results_df, file = "output/results_df.RData")
 
