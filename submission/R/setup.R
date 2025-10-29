@@ -53,6 +53,11 @@ required_pkgs <- c(
   "stringr", "zoo", "xts", "lubridate", "tibble", "ggplot2"
 )
 
+
+######################################################################
+# Good Stuff
+######################################################################
+
 # Quarterly series the model forecasts and evaluates. Downstream code
 # uses this vector to keep tables/plots aligned, so the names must match
 # the column names produced by the data-processing step.

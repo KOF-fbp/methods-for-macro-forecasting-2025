@@ -53,6 +53,29 @@ plot_target_forecasts_with_history <- function(fc_df, ar_df, history_df, out_dir
     dplyr::filter(time <= max(forecast_df$time))
 
   last_actual <- max(hist_plot$time)
+  last_value <- hist_plot$value[match(last_actual, hist_plot$time)]
+  first_forecast <- min(forecast_df$time)
+
+  # Extend forecasts back to the last observed point so the lines join
+  # smoothly with history, but only if there's a gap between the last
+  # observation and the first forecast period.
+  if (first_forecast > last_actual) {
+    anchor_row <- tibble::tibble(
+      time = last_actual,
+      lower = last_value,
+      median = last_value,
+      upper = last_value
+    )
+
+    forecast_df <- dplyr::bind_rows(anchor_row, forecast_df) |>
+      dplyr::arrange(time)
+
+    ar_plot <- dplyr::bind_rows(
+      tibble::tibble(time = last_actual, ar2 = last_value),
+      ar_plot
+    ) |>
+      dplyr::arrange(time)
+  }
 
   p <- ggplot2::ggplot(hist_plot, ggplot2::aes(x = time, y = value)) +
     ggplot2::geom_line(colour = "#4c4c4c") +
@@ -105,6 +128,8 @@ plot_gdp_forecasts <- function(fc_gdp, ar_gdp, out_dir) {
 }
 
 plot_gdp_forecasts_with_history <- function(fc_gdp, ar_gdp, qdat, out_dir) {
+  # For GDP growth, history_df already contains growth rates (not levels),
+  # so the anchor row will correctly use the last observed growth rate.
   history_df <- tibble::tibble(
     time = zoo::as.Date(qdat$qtr, frac = 1),
     value = qdat$gdp_growth
