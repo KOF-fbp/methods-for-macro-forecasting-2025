@@ -144,22 +144,53 @@ exch_plot_path <- NULL
 exch_context_path <- NULL
 
 if (nrow(fc_gdp)) {
-  ar2_vals <- predict_ar2(qdat$gdp_growth, nrow(fc_gdp), var_label = "gdp_growth", context = "forecast horizon")
+  # The first MF-VAR forecast may be a nowcast of the current quarter.
+  # AR(2) can only forecast future periods, so we prepend the last observed
+  # value if the first forecast date matches the last observation quarter.
+  last_qtr_end <- zoo::as.Date(tail(qdat$qtr, 1), frac = 1)
+  first_fc_date <- fc_gdp$time[1]
+  
+  if (first_fc_date == last_qtr_end) {
+    # First forecast is a nowcast; AR(2) uses observed value, then forecasts n-1 ahead
+    ar2_vals <- c(tail(qdat$gdp_growth, 1), predict_ar2(qdat$gdp_growth, nrow(fc_gdp) - 1, var_label = "gdp_growth", context = "forecast horizon"))
+  } else {
+    # All forecasts are genuine future periods
+    ar2_vals <- predict_ar2(qdat$gdp_growth, nrow(fc_gdp), var_label = "gdp_growth", context = "forecast horizon")
+  }
+  
   ar2_gdp <- tibble::tibble(time = fc_gdp$time, ar2 = ar2_vals)
   gdp_plot_path <- plot_gdp_forecasts(fc_gdp, ar2_gdp, OUT_DIR)
   gdp_context_path <- plot_gdp_forecasts_with_history(fc_gdp, ar2_gdp, qdat, OUT_DIR)
 }
 
 if (nrow(fc_infl)) {
-  ar2_vals <- predict_ar2(qdat$inflation, nrow(fc_infl), var_label = "inflation", context = "forecast horizon")
+  last_qtr_end <- zoo::as.Date(tail(qdat$qtr, 1), frac = 1)
+  first_fc_date <- fc_infl$time[1]
+  
+  if (first_fc_date == last_qtr_end) {
+    ar2_vals <- c(tail(qdat$inflation, 1), predict_ar2(qdat$inflation, nrow(fc_infl) - 1, var_label = "inflation", context = "forecast horizon"))
+  } else {
+    ar2_vals <- predict_ar2(qdat$inflation, nrow(fc_infl), var_label = "inflation", context = "forecast horizon")
+  }
+  
   ar2_infl <- tibble::tibble(time = fc_infl$time, ar2 = ar2_vals)
   inflation_plot_path <- plot_inflation_forecasts(fc_infl, ar2_infl, OUT_DIR)
   inflation_context_path <- plot_inflation_forecasts_with_history(fc_infl, ar2_infl, qdat, OUT_DIR)
 }
 
 if (nrow(fc_exch)) {
-  ar2_vals <- predict_ar2(qdat$exch_rate, nrow(fc_exch), var_label = "exch_rate", context = "forecast horizon")
-  ar2_exch <- tibble::tibble(time = fc_exch$time, ar2 = exp(ar2_vals))
+  last_qtr_end <- zoo::as.Date(tail(qdat$qtr, 1), frac = 1)
+  first_fc_date <- fc_exch$time[1]
+  
+  if (first_fc_date == last_qtr_end) {
+    # For exchange rate: last observed is in log space, AR(2) forecasts in log, convert to level
+    ar2_vals <- c(tail(qdat$exch_rate, 1), predict_ar2(qdat$exch_rate, nrow(fc_exch) - 1, var_label = "exch_rate", context = "forecast horizon"))
+    ar2_exch <- tibble::tibble(time = fc_exch$time, ar2 = exp(ar2_vals))
+  } else {
+    ar2_vals <- predict_ar2(qdat$exch_rate, nrow(fc_exch), var_label = "exch_rate", context = "forecast horizon")
+    ar2_exch <- tibble::tibble(time = fc_exch$time, ar2 = exp(ar2_vals))
+  }
+  
   exch_plot_path <- plot_exch_rate_forecasts(fc_exch, ar2_exch, OUT_DIR)
   exch_context_path <- plot_exch_rate_forecasts_with_history(fc_exch, ar2_exch, qdat, OUT_DIR)
 }
