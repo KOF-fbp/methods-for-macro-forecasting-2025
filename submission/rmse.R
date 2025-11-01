@@ -76,39 +76,50 @@ df <- df %>% filter(!is.na(gdp))  # remove first row with NA
 # possible lags: 1, 4 (one year), 8 (two years)
 lags <- c(1,4)
 
-#plot the forecast variables
-fv <- c("gdp", "inflation", "wkfreuro")
-
-for (v in fv){
-  plot(df[,v])
-}
-
 # ------------------ selected variables ------------------#
 
 #selected variables for BVAR model
 
 selected_variables_0 <- c("gdp", "inflation", "wkfreuro")
-
-selected_variables_1 <- c("gdp", "inflation", "wkfreuro", "consp", "consg", 
-                          "ifix", "icnstr", "ime", "exc1", "imc1", "ltot", "uroff", "wage", 
-                          "srate", "poilusd", "pcioecd", "vaabcde", "vaghji")
+#"consp"
+selected_variables_1 <- c("gdp", "inflation", "wkfreuro", "consg", 
+                          #"ifix", "icnstr", #"ime", #"exc1", #"imc1", 
+                          "ltot", #"uroff",
+                          "wage", 
+                          #"srate",
+                          "poilusd", "pcioecd")#, #"vaabcde", #"vaghji")
 
 #from this initial set, we will also try a smaller set of variables
 
-selected_variables_2 <- c("gdp", "inflation", "wkfreuro", "consp", "consg", "ifix", 
-                          "exc1", "imc1", "ltot", "uroff", "wage", "srate", 
-                          "poilusd", "pcioecd")
+#selected_variables_2 <- c("gdp", "inflation", "wkfreuro", "consg", "ifix", 
+#                          "exc1", "imc1", "ltot", "uroff", "wage", #"srate", 
+#                          "poilusd", "pcioecd")
 
-selected_variables_3 <- c("gdp", "inflation", "wkfreuro", "consp", "exc1", "ltot",
-                          "wage", "srate")
+#selected_variables_3 <- c("gdp", "inflation", "wkfreuro", "exc1", "ltot",
+#                         "wage")#, "srate")
 
+
+# just for checkig the variables
+#for (var in selected_variables_1) {
+#  plot_data <- data.frame(
+#    date = df$date,
+#    value = df[[var]]
+#  )
+#  
+#  p <- ggplot(plot_data, aes(x = date, y = value)) +
+#    geom_line() +
+#    labs(title = paste("Time Series of", var),
+#         y = var) +
+#    theme_bw()
+#  print(p)
+#}
 #-------------------------------------------------------------------
 # List of variable sets to test
 variable_sets <- list(
   set_0 = selected_variables_0,
-  set_1 = selected_variables_1,
-  set_2 = selected_variables_2,
-  set_3 = selected_variables_3
+  set_1 = selected_variables_1#,
+  #set_2 = selected_variables_2,
+  #set_3 = selected_variables_3
 )
 
 #--------------------- priors ---------------------#
@@ -149,132 +160,19 @@ soc_prior_bv <- bv_priors(
 # Lista di prior pronta per essere passata a BVAR::bvar
 prior_configs <- list(
   mn      = mn_prior_bv,
-  soc     = soc_prior_bv
- #diffuse = diffuse_prior_bv
+  soc     = soc_prior_bv,
+  diffuse = diffuse_prior_bv
 )
 
 rolling_window_size <- 110  # e.g., 40 quarters (10 years)
 
 #---------------------- end of setup ---------------------#
-compute_bvar_rmse <- function(data, variables, lags, prior, model_type = c("bvar", "var")) {
-  cat("Computing RMSE for variables:", paste(variables, collapse = ", "), 
-      "with lags =", lags, "and model type =", model_type, "\n")
-
-  model_type <- match.arg(model_type)
-  errors_matrix <- NULL
-  valid_windows <- 0
-  
-  for (i in seq(rolling_window_size, nrow(data) - 1)) {
-    train_data <- data[(i - rolling_window_size + 1):i, , drop = FALSE]
-    test_data  <- data[i + 1, , drop = FALSE]
-    
-    # subset and coerce to numeric
-    train_subset <- train_data[, variables, drop = FALSE]
-    train_num <- as.data.frame(lapply(train_subset, function(x) as.numeric(x)))
-    names(train_num) <- variables
-    
-    # basic validation: no NA, finite, enough rows
-    if (any(is.na(train_num)) || any(!is.finite(as.matrix(train_num)))) {
-      message(sprintf("Skipping window ending at row %d: NA or non-finite in training data.", i))
-      next
-    }
-    if (nrow(train_num) <= max(lags)) {
-      message(sprintf("Skipping window ending at row %d: not enough observations (n=%d).", i, nrow(train_num)))
-      next
-    }
-    
-    # also validate test row
-    test_vals <- as.numeric(test_data[, variables])
-    if (any(is.na(test_vals)) || any(!is.finite(test_vals))) {
-      message(sprintf("Skipping window ending at row %d: NA or non-finite in test data.", i))
-      next
-    }
-    
-    if (model_type == "bvar") {
-      model <- tryCatch(
-        BVAR::bvar(data = train_num, lags = lags, priors = prior, ndraw = 1000, burnin = 500),
-        error = function(e) {
-          message("bvar() failed at window ending ", i, ": ", conditionMessage(e))
-          return(NULL)
-        }
-      )
-      if (is.null(model)) next
-      
-      forecast <- tryCatch(
-        predict(model, h = 1),
-        error = function(e) {
-          message("predict() failed at window ending ", i, ": ", conditionMessage(e))
-          return(NULL)
-        }
-      )
-      if (is.null(forecast) || is.null(forecast$fcst)) next
-      
-      forecasted_mean <- sapply(forecast$fcst, function(x) x$mean[1])
-      error <- forecasted_mean - test_vals
-      
-    } else { # classical VAR benchmark
-      model_var <- tryCatch(
-        vars::VAR(train_num, p = max(1, lags), type = "const"),
-        error = function(e) {
-          message("VAR() failed at window ending ", i, ": ", conditionMessage(e))
-          return(NULL)
-        }
-      )
-      if (is.null(model_var)) next
-      
-      pred <- tryCatch(
-        predict(model_var, n.ahead = 1, ci = 0.95),
-        error = function(e) {
-          message("predict.VAR() failed at window ending ", i, ": ", conditionMessage(e))
-          return(NULL)
-        }
-      )
-      if (is.null(pred) || is.null(pred$fcst)) next
-      
-      # extract point forecasts for each variable
-      forecasted_mean <- sapply(variables, function(v) {
-        fcst_mat <- pred$fcst[[v]]
-        # ensure we have forecast matrix and take fcst column at row 1
-        if (!is.null(fcst_mat) && "fcst" %in% colnames(fcst_mat)) {
-          as.numeric(fcst_mat[1, "fcst"])
-        } else {
-          NA_real_
-        }
-      })
-      error <- forecasted_mean - test_vals
-    }
-    
-    if (any(is.na(error)) || any(!is.finite(error))) {
-      message(sprintf("Skipping window ending at row %d: invalid forecast error.", i))
-      next
-    }
-    
-    if (is.null(errors_matrix)) {
-      errors_matrix <- matrix(error, nrow = 1)
-    } else {
-      errors_matrix <- rbind(errors_matrix, error)
-    }
-    valid_windows <- valid_windows + 1
-  }
-  
-  if (is.null(errors_matrix) || valid_windows == 0) {
-    warning("No valid rolling windows were processed. Returning NA for RMSE.")
-    return(NA_real_)
-  }
-  
-  rmse_values <- sqrt(colMeans(errors_matrix^2))
-  overall_rmse <- mean(rmse_values)
-  return(overall_rmse)
-}
 
 compute_bvar_rmse <- function(data, variables, lags, prior, window_size){
   
   horizon <- 1
-
   n_obs <- nrow(data)
 
-  quantile_bands <- c("2.5%", "16%", "50%", "84%", "97.5%")
-  # building a matrix to save results of q50
   forecast_variables <- c("gdp", "inflation", "wkfreuro")
 
   pred_q50 <- matrix(NA_real_, nrow = n_obs, ncol = length(variables),
@@ -299,30 +197,9 @@ compute_bvar_rmse <- function(data, variables, lags, prior, window_size){
       verbose = FALSE
     ))
     
+    prediction <- predict(trained_model, horizon = horizon)
     
-    prediction <- predict(trained_model, horizon = horizon, conf_bands = c(0.16, 0.025))
-    
-    # extract quantiles
-    pred_quants <- prediction$quants
-    mat <- matrix(NA_real_, nrow = length(variables), ncol = length(quantile_bands),
-                  dimnames = list(variables, quantile_bands))
-    
-    for (j in seq_along(variables)) {
-      mat[j, ] <- pred_quants[, 1, j]
-    }
-    
-    # save the results
-    results <- as_tibble(mat, rownames = "variable") %>%
-      rename(
-        q025 = `2.5%`,
-        q16  = `16%`,
-        q50  = `50%`,
-        q84  = `84%`,
-        q975 = `97.5%`
-      )
-  
-    pred_q50[i+1, ] <- results$q50
-    
+    pred_q50[i + horizon, ] <- prediction$quants["50%", 1, ]
   }
 
   # create a data frame with results (one column for variable, one for rmse one
@@ -339,20 +216,35 @@ compute_bvar_rmse <- function(data, variables, lags, prior, window_size){
     valid_indices <- which(!is.na(pred_q50[, var]))
     rmse <- sqrt(mean((pred_q50[valid_indices, var] - data[valid_indices, var])^2))
     mae <- mean(abs(pred_q50[valid_indices, var] - data[valid_indices, var]))
-    
     cat(rmse, "\n")
     
     res$rmse[i] <- rmse
+  }
+  
+  for (i in seq_along(forecast_variables)) {
     
+    var <- forecast_variables[i]
+
+    plot_data <- data.frame(
+      date = data$date,
+      actual = data[[var]],
+      forecast = pred_q50[, var]
+    )
+    
+    p <- ggplot(plot_data, aes(x = date)) +
+      geom_line(aes(y = actual, color = "Actual")) +
+      geom_line(aes(y = forecast, color = "Forecast")) +
+      labs(title = paste("BVAR Forecast vs Actual for", var),
+           y = var,
+           color = "Legend") +
+      theme_bw()
+    print(p)
   }
   
   return(res)
 }
 
-
 #–-------------------- BVAR/VAR RMSE computation ---------------------#
-
-# data frame for results always add the new results at the end of the df, but also add columns with lags, variable set and prior used
 
 results_df <- data.frame(
   variable = character(),
@@ -362,10 +254,11 @@ results_df <- data.frame(
   prior = character(),
   stringsAsFactors = FALSE
 )
+
 for (lag in lags) {
-  #print(paste("Testing lag:", lag))
+ 
   for (var_set_name in names(variable_sets)) {
-    #cat("testing: ", var_set_name)
+
     selected_vars <- variable_sets[[var_set_name]]
     
     for (prior_name in names(prior_configs)) {
@@ -383,12 +276,12 @@ for (lag in lags) {
       temp_results$variable_set <- var_set_name
       temp_results$prior <- prior_name
       results_df <- rbind(results_df, temp_results)
-      
     }
   }
 }
 
 results_df
+
 # save results to the output folder
 save(results_df, file = "output/results_df.RData")
 
