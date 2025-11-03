@@ -9,12 +9,15 @@ library(midasr)
 library(ggplot2)
 library(kofdata)
 library(lubridate)
-
+library(dplyr)
 ```
 
-### Import Data
+## Import Data
 
 ```{r}
+# only for rendering??? 
+# data_raw <- read.csv("../../data/data_quarterly.csv")
+# metadata <- read.csv("../../data/metadata_quarterly.csv")
 data_raw <- read.csv("submission/data/data_quarterly.csv")
 metadata <- read.csv("submission/data/metadata_quarterly.csv")
 
@@ -25,13 +28,52 @@ data <- data_raw |> dplyr::select(c("date", "gdp"))
 # all y data
 y_ext <- ts(data$gdp, start = c(1992, 1), end =  c(2027, 4), frequency=4) 
 # y - without forecasts
-y <- ts(data$gdp, start = c(1992, 1), end =  c(2025, 3), frequency=4) # quarterly
+# because we diff later, go one step forward to make up for loss of 1 val for x
+y <- window(y_ext, start = c(1992, 1), end =  c(2025, 3)) # quarterly
 # monthly time series -> kof (swiss) economic barometer
-x <- window(get_time_series("ch.kof.barometer")$ch.kof.barometer, start=start(y))
-
+baro <- get_time_series("ch.kof.barometer")$ch.kof.barometer
 ```
 
-### Train/Test Split
+#### diff and align monthly series
+```{r}
+# align monthly series so that after differencing it starts at the first month
+# of the first quarter in y
+y_start <- start(y)                 # c(year, quarter)
+y_start_year <- y_start[1]
+y_start_quarter <- y_start[2]
+first_month_of_quarter <- (y_start_quarter - 1) * 3 + 1
+prev_month <- first_month_of_quarter - 1
+if (prev_month == 0) {
+  prev_month <- 12
+  prev_year <- y_start_year - 1
+} else {
+  prev_year <- y_start_year
+}
+
+# fetch one extra month before the first quarter, then difference and realign
+xx0 <- window(baro, start = c(prev_year, prev_month))
+x <- diff(xx0)
+# after diff, both have the same start -> suitable length for midas regression
+x <- window(x, start = c(y_start_year, first_month_of_quarter))
+```
+
+
+#### check for stationarity
+```{r}
+# TODO: check for seasonality as well
+acf(x)
+```
+
+significant at lag 1.
+
+```{r}
+acf(diff(y))
+pacf(diff(y))
+```
+
+If y is decomposed, it's white noise
+
+## Train/Test Split
 
 This is just preliminary until general CV is ready.
 
@@ -50,10 +92,6 @@ y_train_end_time <- time(y_train)[length(y_train)]  # e.g., 2022
 y_val <- window(y, start = time(y)[n - n_val + 1])
 length(y_val) # 14
 
-lag_months <- (m - 1) * k
-lag_years  <- lag_months / 12
-
-
 x_train <- window(x, end = c(y_train_end_time,3)) # ends 2022,3 -> needs to be length(x)/m=length(y)
 length(x_train) # 363
 
@@ -65,10 +103,10 @@ trend_val <- (length(y_train)+1) : (length(y_train)+length(y_val))
 length(trend_val) # 14
 ```
 
-### Fit Models
+## Fit Models
 
 #### Midas w/ AR(1) and trend 
-```{r}
+```{r midas}
 # check length of fmls matrix 
 
 m <- 3 # needs to be length(x)/m=length(y) so, m = 3
@@ -102,9 +140,14 @@ m_ar1 <- midas_r(
 summary(m_ar1)
 ```
 
+#### Midas w/ AR(p) and no trend
 
-### Forecast 
+#### determine suitable p
 
+
+## Forecast 
+
+#### Midas w/ AR(1) and trend
 ```{r}
 h <- 4 # one year point forecasts
 
@@ -123,20 +166,63 @@ summary(m_ar1_t_forecast)
 m_ar1_t_forecast <- m_ar1_t_forecast$mean
 ```
 
+#### Midas w/ AR(1) and no trend
+
+```{r}
+# h <- 4 # one year point forecasts
+
+# here need to constrict x_val as well so that length(x_val)/m = length(y_val)
+# w/ trend
+m_ar1_forecast <- midasr::forecast(
+  m_ar1, 
+  # need to name them the same as above, if not, doesn't work
+  newdata=list(x_train=x_val, trend_train=trend_val), 
+  h=4, 
+  method='dynamic' # dynamic, aka uses y_hat t for forecasting y hat t+1 -> because only 1 lag used for y (see model spec above)
+  )
+
+summary(m_ar1_forecast)
+# from now on, only actual values is forecast
+m_ar1_forecast <- m_ar1_forecast$mean
+length(m_ar1_forecast)
+```
+
+
+
+```{r}
+# h <- 4 # one year point forecasts
+
+# here need to constrict x_val as well so that length(x_val)/m = length(y_val)
+# w/ trend
+m_ar1_forecast <- midasr::forecast(
+  m_ar1, 
+  # need to name them the same as above, if not, doesn't work
+  newdata=list(x_train=x_val, trend_train=trend_val), 
+  h=4, 
+  method='dynamic' # dynamic, aka uses y_hat t for forecasting y hat t+1 -> because only 1 lag used for y (see model spec above)
+  )
+
+summary(m_ar1_forecast)
+# from now on, only actual values is forecast
+m_ar1_forecast <- m_ar1_forecast$mean
+length(m_ar1_forecast)
+```
 
 ### create Plot DF
 
 ```{r}
+# TODO: add true data
 # for this, merge y_train and y_valid together into a single 'ts' object
-h <- length(m_ar1_t_forecast$mean)
+h <- length(m_ar1_t_forecast)
 df_plot <- data.frame(
   time = (T - 19):(T + h),
-  actual = c(tail(y, 20), rep(NA, h)),
-  mr_ar1_t_forecast = c(rep(NA, 20), as.numeric(m_ar1_t_forecast))
+  actual = c(tail(y_train, 20), rep(NA, h)),
+  actual_post = c(rep(NA, 20), tail(y_val, h)),
+  m_ar1_t_forecast = c(rep(NA, 20), as.numeric(m_ar1_t_forecast)),
+  m_ar1_forecast = c(rep(NA, 20), as.numeric(m_ar1_forecast))
 )
 
 df_plot
-
 ```
 
 ### Plot
@@ -144,37 +230,49 @@ df_plot
 ```{r}
 ggplot(df_plot, aes(x = time)) +
   geom_line(aes(y = actual), color = "black", size = 1, linetype = "solid") +
-  geom_line(aes(y = m_ar1_t_forecast, color = "Simple MIDAS"), size = 1) +
-  # geom_line(aes(y = mr_it_forecast, color = "Trend MIDAS"), size = 1) +
+  geom_line(aes(y = actual_post), color = "black", size = 1, linetype = "dashed") +
+  geom_line(aes(y = m_ar1_forecast, color = "Simple MIDAS"), size = 1) +
+  geom_line(aes(y = m_ar1_t_forecast, color = "Trend MIDAS"), size = 1) +
   labs(
     title = "MIDAS Forecast Comparison",
     y = "Y",
     color = "Model"
   ) +
   theme_minimal(base_size = 14) +
-  geom_vline(xintercept = T, linetype = "dashed") +
-  annotate("text", x = T + 0.5, y = max(df_plot$actual, na.rm = TRUE),
-           label = "Forecast Start", hjust = 0, vjust = -0.5, size = 4)
+  geom_vline(xintercept = T, linetype = "dashed")
 
 ```
 
-### test
+### Evaluation
+
 ```{r}
-# rm(list = ls())
-# ##Load data
-# data("USunempr")
-# data("USrealgdp")
+# Get forecast period data only
+eval_df <- tail(df_plot, h) |> 
+  select(-c('actual')) |>
+  mutate(
+    # Calculate squared errors for each model
+    se_trend = (actual_post - m_ar1_t_forecast)^2,
+    se_simple = (actual_post - m_ar1_forecast)^2
+  )
 
-# y <- diff(log(USrealgdp))
-# # length(y) # 63
-# x <- window(diff(USunempr),start=1949)
-# # length(x) # 756
-# t <- 1:length(y)
+# Calculate MSE for each model
+mse_results <- data.frame(
+  Model = c("MIDAS with trend", "MIDAS without trend"),
+  MSE = c(
+    mean(eval_df$se_trend, na.rm = TRUE),
+    mean(eval_df$se_simple, na.rm = TRUE)
+  ),
+  RMSE = c(
+    sqrt(mean(eval_df$se_trend, na.rm = TRUE)),
+    sqrt(mean(eval_df$se_simple, na.rm = TRUE))
+  )
+)
 
-# f <- fmls(x,11,12,nealmon)
-# # length(f) # 756
-# length(f)/12  # needs to be != y
-# # length(f) -> rows = 756/m, cols = m
-# # gives matrix of dim
-# midas_r(y~t+fmls(x,11,12,nealmon),start=list(x=c(0,0,0)))
+# Show both the detailed errors and summary statistics
+print("Detailed errors by time period:")
+print(eval_df)
+print("\nSummary MSE/RMSE by model:")
+print(mse_results)
 ```
+
+So for now, the model with trend performs better than the model with trend.
