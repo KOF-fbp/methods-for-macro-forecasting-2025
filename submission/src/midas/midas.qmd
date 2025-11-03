@@ -1,0 +1,180 @@
+---
+title: "MIDAS Regressions using Swiss Data"
+author: "Minna"
+---
+
+```{r, show=FALSE, output=FALSE}
+rm(list = ls())
+library(midasr)
+library(ggplot2)
+library(kofdata)
+library(lubridate)
+
+```
+
+### Import Data
+
+```{r}
+data_raw <- read.csv("submission/data/data_quarterly.csv")
+metadata <- read.csv("submission/data/metadata_quarterly.csv")
+
+metadata <- metadata[, c(1,8)]
+
+# transform to ts object
+data <- data_raw |> dplyr::select(c("date", "gdp"))
+# all y data
+y_ext <- ts(data$gdp, start = c(1992, 1), end =  c(2027, 4), frequency=4) 
+# y - without forecasts
+y <- ts(data$gdp, start = c(1992, 1), end =  c(2025, 3), frequency=4) # quarterly
+# monthly time series -> kof (swiss) economic barometer
+x <- window(get_time_series("ch.kof.barometer")$ch.kof.barometer, start=start(y))
+
+```
+
+### Train/Test Split
+
+This is just preliminary until general CV is ready.
+
+```{r}
+n <- length(y)
+n_val <- ceiling(0.1*n)
+
+
+y_train <- window(y, end = time(y)[n - n_val]) # end 2022.25
+length(y_train) # 121
+
+# compute end time to not have alignment issues
+y_train_end_time <- time(y_train)[length(y_train)]  # e.g., 2022
+
+
+y_val <- window(y, start = time(y)[n - n_val + 1])
+length(y_val) # 14
+
+lag_months <- (m - 1) * k
+lag_years  <- lag_months / 12
+
+
+x_train <- window(x, end = c(y_train_end_time,3)) # ends 2022,3 -> needs to be length(x)/m=length(y)
+length(x_train) # 363
+
+x_val <- window(x, start = c(y_train_end_time,5))
+length(x_val) # 42
+
+trend_train <- 1:length(y_train)
+trend_val <- (length(y_train)+1) : (length(y_train)+length(y_val))
+length(trend_val) # 14
+```
+
+### Fit Models
+
+#### Midas w/ AR(1) and trend 
+```{r}
+# check length of fmls matrix 
+
+m <- 3 # needs to be length(x)/m=length(y) so, m = 3
+
+f <- fmls(x_train, k=2, m=3, nealmon)
+length(f)
+
+# with trend 
+m_ar1_t <- midas_r(
+  y_train ~ 
+  trend_train + # incl. trend 
+  mls(y_train, k=1, m=1) + # AR(1)
+  fmls(x_train, k=2, m=3), # max lag 1 year # add nealmon sometime
+  start = list(x_train = rep(0, 3))
+  )
+
+summary(m_ar1_t)
+```
+
+#### Midas w/ AR(1) and no trend 
+
+```{r}
+# without trend
+m_ar1 <- midas_r(
+  y_train ~ 
+  mls(y_train, k=1, m=1) + # AR(1)
+  fmls(x=x_train, k=2, m=3), # max lag 1 year # add nealmon sometime
+  start = list(x_train = rep(0, 3))
+  )
+
+summary(m_ar1)
+```
+
+
+### Forecast 
+
+```{r}
+h <- 4 # one year point forecasts
+
+# here need to constrict x_val as well so that length(x_val)/m = length(y_val)
+# w/ trend
+m_ar1_t_forecast <- midasr::forecast(
+  m_ar1_t, 
+  # need to name them the same as above, if not, doesn't work
+  newdata=list(x_train=x_val, trend_train=trend_val), 
+  h=4, 
+  method='dynamic' # dynamic, aka uses y_hat t for forecasting y hat t+1 -> because only 1 lag used for y (see model spec above)
+  )
+
+summary(m_ar1_t_forecast)
+# from now on, only actual values is forecast
+m_ar1_t_forecast <- m_ar1_t_forecast$mean
+```
+
+
+### create Plot DF
+
+```{r}
+# for this, merge y_train and y_valid together into a single 'ts' object
+h <- length(m_ar1_t_forecast$mean)
+df_plot <- data.frame(
+  time = (T - 19):(T + h),
+  actual = c(tail(y, 20), rep(NA, h)),
+  mr_ar1_t_forecast = c(rep(NA, 20), as.numeric(m_ar1_t_forecast))
+)
+
+df_plot
+
+```
+
+### Plot
+
+```{r}
+ggplot(df_plot, aes(x = time)) +
+  geom_line(aes(y = actual), color = "black", size = 1, linetype = "solid") +
+  geom_line(aes(y = m_ar1_t_forecast, color = "Simple MIDAS"), size = 1) +
+  # geom_line(aes(y = mr_it_forecast, color = "Trend MIDAS"), size = 1) +
+  labs(
+    title = "MIDAS Forecast Comparison",
+    y = "Y",
+    color = "Model"
+  ) +
+  theme_minimal(base_size = 14) +
+  geom_vline(xintercept = T, linetype = "dashed") +
+  annotate("text", x = T + 0.5, y = max(df_plot$actual, na.rm = TRUE),
+           label = "Forecast Start", hjust = 0, vjust = -0.5, size = 4)
+
+```
+
+### test
+```{r}
+# rm(list = ls())
+# ##Load data
+# data("USunempr")
+# data("USrealgdp")
+
+# y <- diff(log(USrealgdp))
+# # length(y) # 63
+# x <- window(diff(USunempr),start=1949)
+# # length(x) # 756
+# t <- 1:length(y)
+
+# f <- fmls(x,11,12,nealmon)
+# # length(f) # 756
+# length(f)/12  # needs to be != y
+# # length(f) -> rows = 756/m, cols = m
+# # gives matrix of dim
+# midas_r(y~t+fmls(x,11,12,nealmon),start=list(x=c(0,0,0)))
+```
