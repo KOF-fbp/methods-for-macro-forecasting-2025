@@ -1,0 +1,29 @@
+Package: mfvar
+Type: Package
+Title: Mixed Frequency VAR with Bayesian Estimation
+Version: 0.1.0
+Authors@R: c(
+    person("Sam", "Bartlett", email = "sam@example.com", role = c("aut", "cre"))
+    )
+Description: Implements a Mixed Frequency VAR following Schorfheide and Song.
+    The latent economy evolves monthly. Some variables are observed monthly, 
+    others quarterly as averages of latent monthly log levels. Supports ragged 
+    edge real-time forecasting, Bayesian estimation with Minnesota prior via 
+    dummy observations, Gibbs sampling, prior selection by marginal data density, 
+    and predictive distributions.
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+Imports:
+    data.table,
+    zoo,
+    Matrix,
+    mvtnorm,
+    KFAS,
+    yaml,
+    ggplot2,
+    cli
+Suggests:
+    testthat (>= 3.0.0)
+RoxygenNote: 7.0.0
+Config/testthat/edition: 3

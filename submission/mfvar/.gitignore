@@ -20,6 +20,7 @@
 
 # RStudio files
 .Rproj.user/
+*.Rproj
 
 # produced vignettes
 vignettes/*.html
@@ -48,6 +49,11 @@ po/*~
 # RStudio Connect folder
 rsconnect/
 
-# Ignore markdown files created for documentation
-MFVAR_README.md
-IMPLEMENTATION_SUMMARY.md
+# MacOS
+.DS_Store
+
+# Package specific
+inst/doc
+src/*.o
+src/*.so
+src/*.dll

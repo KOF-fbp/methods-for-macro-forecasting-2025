@@ -1,0 +1,44 @@
+# MFVAR Configuration File
+# Place this file in your project directory and run: mfvar_cli("config.yaml")
+
+# Data settings
+data_dir: "submission/data"
+data_files: 
+  - "data_quarterly.csv"
+
+# Optional: path to metadata YAML file
+# meta_yaml: "metadata.yaml"
+
+# Output directory for results
+output_dir: "output/mfvar_results"
+
+# Variable classifications
+quarterly_vars: 
+  - "GDP"
+
+monthly_vars: 
+  - "CPI"
+  - "ExRate"
+  - "InterestRate"
+
+# Target variable roles
+gdp_var: "GDP"
+price_vars: 
+  - "CPI"
+exrate_vars: 
+  - "ExRate"
+
+# Model settings
+var_lag: 2
+
+# MCMC settings
+n_draws: 2000
+burnin: 1000
+
+# Hyperparameter grid for selection
+lambda_grid: [0.1, 0.2, 0.5]
+
+# Optional: additional hyperparameters
+# lag_decay: 1
+# cross_eq: 0.5
+# intercept_weight: 1
