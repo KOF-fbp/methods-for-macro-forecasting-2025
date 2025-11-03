@@ -26,9 +26,12 @@ if (!dir.exists(OUT_DIR)) dir.create(OUT_DIR, recursive = TRUE)
 qdat_raw <- read_quarterly_data(DATA_DIR)
 baro_raw <- fetch_kof_barometer()
 trimmed <- trim_to_overlap(qdat_raw, baro_raw)
-qdat <- trimmed$qdat
-baro_ts <- window_baro(trimmed$baro_ts, qdat)
-Y <- build_Y(qdat, baro_ts)
+stationary <- stationarise_quarterly(trimmed$qdat)
+qdat_orig <- trimmed$qdat
+qdat_adj <- stationary$data
+transforms <- stationary$transforms
+baro_ts <- window_baro(trimmed$baro_ts, qdat_orig)
+Y <- build_Y(qdat_adj, baro_ts)
 
 target_vars <- target_variables
 n_lags <- 5
@@ -36,8 +39,8 @@ n_lags <- 5
 # --- Evaluation suites ------------------------------------------------------
 # Benchmark MF-VAR forecasts against AR(2) both on a holdout window and
 # in rolling one-step-ahead cross-validation.
-holdout_results <- run_holdout_evaluation(qdat, baro_ts, n_lags, target_vars, OUT_DIR)
-cv_results <- run_cross_validation(qdat, baro_ts, n_lags, target_vars, OUT_DIR)
+holdout_results <- run_holdout_evaluation(qdat_adj, qdat_orig, baro_ts, n_lags, target_vars, transforms, OUT_DIR)
+cv_results <- run_cross_validation(qdat_adj, qdat_orig, baro_ts, n_lags, target_vars, transforms, OUT_DIR)
 
 # --- Estimation and forecasting --------------------------------------------
 # Refit the MF-VAR on the full sample and produce 12 quarter-ahead forecasts
@@ -45,6 +48,23 @@ cv_results <- run_cross_validation(qdat, baro_ts, n_lags, target_vars, OUT_DIR)
 mod_ss <- estimate_mfvar_model(Y, n_lags, n_fcst = 12, seed = 123)
 
 fc <- predict(mod_ss, aggregate_fcst = TRUE, pred_bands = 0.8)
+n_obs <- nrow(qdat_adj)
+fc <- fc |>
+  dplyr::group_by(variable) |>
+  dplyr::mutate(
+    step_ahead_tmp = dplyr::row_number(),
+    time_index = dplyr::if_else(
+      variable %in% names(transforms),
+      as.integer(compute_time_index(n_obs, step_ahead_tmp)),
+      NA_integer_
+    ),
+    lower = restore_series_values(lower, variable, time_index, transforms),
+    median = restore_series_values(median, variable, time_index, transforms),
+    upper = restore_series_values(upper, variable, time_index, transforms)
+  ) |>
+  dplyr::ungroup() |>
+  dplyr::select(-step_ahead_tmp, -time_index)
+
 fc_q <- fc |>
   dplyr::filter(variable %in% target_vars) |>
   dplyr::arrange(variable, time) |>
@@ -147,52 +167,81 @@ if (nrow(fc_gdp)) {
   # The first MF-VAR forecast may be a nowcast of the current quarter.
   # AR(2) can only forecast future periods, so we prepend the last observed
   # value if the first forecast date matches the last observation quarter.
-  last_qtr_end <- zoo::as.Date(tail(qdat$qtr, 1), frac = 1)
+  last_qtr_end <- zoo::as.Date(tail(qdat_orig$qtr, 1), frac = 1)
   first_fc_date <- fc_gdp$time[1]
-  
+
   if (first_fc_date == last_qtr_end) {
-    # First forecast is a nowcast; AR(2) uses observed value, then forecasts n-1 ahead
-    ar2_vals <- c(tail(qdat$gdp_growth, 1), predict_ar2(qdat$gdp_growth, nrow(fc_gdp) - 1, var_label = "gdp_growth", context = "forecast horizon"))
+    future_steps <- max(nrow(fc_gdp) - 1, 0)
+    future_preds <- if (future_steps) {
+      preds_adj <- predict_ar2(qdat_adj$gdp_growth, future_steps, var_label = "gdp_growth", context = "forecast horizon")
+      indices <- compute_time_index(nrow(qdat_adj), seq_len(future_steps))
+      restore_series_values(preds_adj, rep("gdp_growth", future_steps), indices, transforms)
+    } else {
+      numeric(0)
+    }
+    ar2_vals <- c(tail(qdat_orig$gdp_growth, 1), future_preds)
   } else {
-    # All forecasts are genuine future periods
-    ar2_vals <- predict_ar2(qdat$gdp_growth, nrow(fc_gdp), var_label = "gdp_growth", context = "forecast horizon")
+    future_steps <- nrow(fc_gdp)
+    preds_adj <- predict_ar2(qdat_adj$gdp_growth, future_steps, var_label = "gdp_growth", context = "forecast horizon")
+    indices <- compute_time_index(nrow(qdat_adj), seq_len(future_steps))
+    ar2_vals <- restore_series_values(preds_adj, rep("gdp_growth", future_steps), indices, transforms)
   }
-  
+
   ar2_gdp <- tibble::tibble(time = fc_gdp$time, ar2 = ar2_vals)
   gdp_plot_path <- plot_gdp_forecasts(fc_gdp, ar2_gdp, OUT_DIR)
-  gdp_context_path <- plot_gdp_forecasts_with_history(fc_gdp, ar2_gdp, qdat, OUT_DIR)
+  gdp_context_path <- plot_gdp_forecasts_with_history(fc_gdp, ar2_gdp, qdat_orig, OUT_DIR)
 }
 
 if (nrow(fc_infl)) {
-  last_qtr_end <- zoo::as.Date(tail(qdat$qtr, 1), frac = 1)
+  last_qtr_end <- zoo::as.Date(tail(qdat_orig$qtr, 1), frac = 1)
   first_fc_date <- fc_infl$time[1]
-  
+
   if (first_fc_date == last_qtr_end) {
-    ar2_vals <- c(tail(qdat$inflation, 1), predict_ar2(qdat$inflation, nrow(fc_infl) - 1, var_label = "inflation", context = "forecast horizon"))
+    future_steps <- max(nrow(fc_infl) - 1, 0)
+    future_preds <- if (future_steps) {
+      preds_adj <- predict_ar2(qdat_adj$inflation, future_steps, var_label = "inflation", context = "forecast horizon")
+      indices <- compute_time_index(nrow(qdat_adj), seq_len(future_steps))
+      restore_series_values(preds_adj, rep("inflation", future_steps), indices, transforms)
+    } else {
+      numeric(0)
+    }
+    ar2_vals <- c(tail(qdat_orig$inflation, 1), future_preds)
   } else {
-    ar2_vals <- predict_ar2(qdat$inflation, nrow(fc_infl), var_label = "inflation", context = "forecast horizon")
+    future_steps <- nrow(fc_infl)
+    preds_adj <- predict_ar2(qdat_adj$inflation, future_steps, var_label = "inflation", context = "forecast horizon")
+    indices <- compute_time_index(nrow(qdat_adj), seq_len(future_steps))
+    ar2_vals <- restore_series_values(preds_adj, rep("inflation", future_steps), indices, transforms)
   }
-  
+
   ar2_infl <- tibble::tibble(time = fc_infl$time, ar2 = ar2_vals)
   inflation_plot_path <- plot_inflation_forecasts(fc_infl, ar2_infl, OUT_DIR)
-  inflation_context_path <- plot_inflation_forecasts_with_history(fc_infl, ar2_infl, qdat, OUT_DIR)
+  inflation_context_path <- plot_inflation_forecasts_with_history(fc_infl, ar2_infl, qdat_orig, OUT_DIR)
 }
 
 if (nrow(fc_exch)) {
-  last_qtr_end <- zoo::as.Date(tail(qdat$qtr, 1), frac = 1)
+  last_qtr_end <- zoo::as.Date(tail(qdat_orig$qtr, 1), frac = 1)
   first_fc_date <- fc_exch$time[1]
-  
+
   if (first_fc_date == last_qtr_end) {
-    # For exchange rate: last observed is in log space, AR(2) forecasts in log, convert to level
-    ar2_vals <- c(tail(qdat$exch_rate, 1), predict_ar2(qdat$exch_rate, nrow(fc_exch) - 1, var_label = "exch_rate", context = "forecast horizon"))
-    ar2_exch <- tibble::tibble(time = fc_exch$time, ar2 = exp(ar2_vals))
+    future_steps <- max(nrow(fc_exch) - 1, 0)
+    future_preds <- if (future_steps) {
+      preds_adj <- predict_ar2(qdat_adj$exch_rate, future_steps, var_label = "exch_rate", context = "forecast horizon")
+      indices <- compute_time_index(nrow(qdat_adj), seq_len(future_steps))
+      restore_series_values(preds_adj, rep("exch_rate", future_steps), indices, transforms)
+    } else {
+      numeric(0)
+    }
+    ar2_vals <- c(tail(qdat_orig$exch_rate, 1), future_preds)
   } else {
-    ar2_vals <- predict_ar2(qdat$exch_rate, nrow(fc_exch), var_label = "exch_rate", context = "forecast horizon")
-    ar2_exch <- tibble::tibble(time = fc_exch$time, ar2 = exp(ar2_vals))
+    future_steps <- nrow(fc_exch)
+    preds_adj <- predict_ar2(qdat_adj$exch_rate, future_steps, var_label = "exch_rate", context = "forecast horizon")
+    indices <- compute_time_index(nrow(qdat_adj), seq_len(future_steps))
+    ar2_vals <- restore_series_values(preds_adj, rep("exch_rate", future_steps), indices, transforms)
   }
-  
+
+  ar2_exch <- tibble::tibble(time = fc_exch$time, ar2 = exp(ar2_vals))
   exch_plot_path <- plot_exch_rate_forecasts(fc_exch, ar2_exch, OUT_DIR)
-  exch_context_path <- plot_exch_rate_forecasts_with_history(fc_exch, ar2_exch, qdat, OUT_DIR)
+  exch_context_path <- plot_exch_rate_forecasts_with_history(fc_exch, ar2_exch, qdat_orig, OUT_DIR)
 }
 
 # --- Persist model ----------------------------------------------------------

@@ -16,26 +16,32 @@ NULL
 
 Holdout horizon: 4 quarter(s).
 
-# A tibble: 6 × 4
-  variable   model    rmse     mae
-  <chr>      <chr>   <dbl>   <dbl>
-1 exch_rate  AR(2)  0.0436 0.0414 
-2 exch_rate  MF-VAR 0.0115 0.00845
-3 gdp_growth AR(2)  1.46   1.24   
-4 gdp_growth MF-VAR 0.305  0.273  
-5 inflation  AR(2)  0.460  0.412  
-6 inflation  MF-VAR 0.213  0.182  
+# A tibble: 9 × 4
+  variable   model       rmse     mae
+  <chr>      <chr>      <dbl>   <dbl>
+1 exch_rate  AR(2)    0.0103  0.00910
+2 exch_rate  MF-VAR   0.00996 0.00725
+3 exch_rate  RW-trend 0.00636 0.00521
+4 gdp_growth AR(2)    1.65    1.33   
+5 gdp_growth MF-VAR   0.628   0.628  
+6 gdp_growth RW-trend 1.47    1.24   
+7 inflation  AR(2)    0.307   0.301  
+8 inflation  MF-VAR   0.175   0.163  
+9 inflation  RW-trend 0.350   0.222  
 
 ==== Rolling 1-step cross-validation ====
 
-Folds: 8 (last 8 quarter(s)).
+Folds: 125 (last 127 quarter(s)).
 
-# A tibble: 6 × 4
-  variable   model    rmse    mae
-  <chr>      <chr>   <dbl>  <dbl>
-1 exch_rate  AR(2)  0.0211 0.0188
-2 exch_rate  MF-VAR 0.0147 0.0124
-3 gdp_growth AR(2)  1.37   1.09  
-4 gdp_growth MF-VAR 1.64   1.26  
-5 inflation  AR(2)  0.509  0.409 
-6 inflation  MF-VAR 0.542  0.360 
+# A tibble: 9 × 4
+  variable   model      rmse    mae
+  <chr>      <chr>     <dbl>  <dbl>
+1 exch_rate  AR(2)    0.0231 0.0169
+2 exch_rate  MF-VAR   0.0217 0.0152
+3 exch_rate  RW-trend 0.0222 0.0151
+4 gdp_growth AR(2)    4.73   2.42  
+5 gdp_growth MF-VAR   6.43   2.95  
+6 gdp_growth RW-trend 6.53   2.93  
+7 inflation  AR(2)    1.11   0.864 
+8 inflation  MF-VAR   1.24   0.969 
+9 inflation  RW-trend 1.27   0.984 
