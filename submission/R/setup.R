@@ -188,3 +188,25 @@ predict_ar2 <- function(series, n_ahead, var_label = "series", context = NULL) {
   warning(sprintf("AR(2)%s for %s failed: %s", ctx, var_label, msg))
   rep(NA_real_, n_ahead)
 }
+
+predict_rw_trend <- function(series, n_ahead, var_label = "series", context = NULL) {
+  stopifnot(n_ahead >= 1)
+  series <- series[is.finite(series)]
+  if (!length(series)) {
+    ctx <- if (is.null(context)) "" else sprintf(" (%s)", context)
+    warning(sprintf("RW-trend%s for %s skipped: no finite observations", ctx, var_label))
+    return(rep(NA_real_, n_ahead))
+  }
+
+  last_value <- tail(series, 1)
+  if (length(series) >= 2) {
+    drift <- mean(diff(series), na.rm = TRUE)
+    if (!is.finite(drift)) {
+      drift <- 0
+    }
+  } else {
+    drift <- 0
+  }
+
+  last_value + drift * seq_len(n_ahead)
+}

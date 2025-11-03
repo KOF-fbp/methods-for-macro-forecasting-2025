@@ -1,8 +1,11 @@
 # Data ingestion and transformation utilities
 
-utils::globalVariables(c(".data", "qtr", "rvgdp", "cpi", "wkfreuro", "gdp_growth", "inflation", "exch_rate"))
+utils::globalVariables(c(
+  ".data", "qtr", "rvgdp", "cpi", "wkfreuro", "gdp_growth", "inflation",
+  "exch_rate", "time_index"
+))
 
-qtr <- rvgdp <- cpi <- wkfreuro <- gdp_growth <- inflation <- exch_rate <- NULL
+qtr <- rvgdp <- cpi <- wkfreuro <- gdp_growth <- inflation <- exch_rate <- time_index <- NULL
 
 read_quarterly_data <- function(data_dir) {
   q_path <- file.path(data_dir, "data_quarterly.csv")
@@ -111,4 +114,112 @@ window_baro <- function(baro_ts, qdat) {
   m_end <- c(q_end_year, q_end_q * 3)
   # Extend two months before the sample start so the ragged-edge aggregation works.
   stats::window(baro_ts, start = m_start_back2, end = m_end)
+}
+
+stationarise_quarterly <- function(qdat, vars = c("gdp_growth", "inflation", "exch_rate"), frequency = 4L) {
+  stopifnot(all(vars %in% names(qdat)))
+  n_obs <- nrow(qdat)
+  if (!n_obs) {
+    return(list(data = qdat, transforms = vector("list", length = 0)))
+  }
+
+  indices <- seq_len(n_obs)
+  qdat_adj <- qdat
+  transforms <- vector("list", length(vars))
+  names(transforms) <- vars
+
+  for (var in vars) {
+    series <- qdat[[var]]
+    finite_mask <- is.finite(series)
+    if (!any(finite_mask)) {
+      warning(sprintf("Series '%s' contains no finite observations; skipping detrend/seasonal adjustment.", var))
+      transforms[[var]] <- list(
+        intercept = 0,
+        slope = 0,
+        frequency = frequency,
+        seasonal = rep(0, frequency),
+        has_seasonal = FALSE,
+        last_index = n_obs
+      )
+      next
+    }
+
+    # Fit a deterministic linear trend. If the sample is too short for a slope,
+    # fall back to mean-centering.
+    if (sum(finite_mask) >= 2) {
+      trend_fit <- stats::lm(series ~ indices)
+      coef_fit <- stats::coef(trend_fit)
+      intercept <- unname(coef_fit[[1]])
+      slope <- if (length(coef_fit) > 1) unname(coef_fit[[2]]) else 0
+    } else {
+      intercept <- mean(series[finite_mask], na.rm = TRUE)
+      slope <- 0
+    }
+
+    trend_component <- intercept + slope * indices
+    detrended <- series - trend_component
+
+    has_seasonal <- isTRUE(frequency > 1L) && (sum(finite_mask) >= frequency)
+    if (has_seasonal) {
+      season_ids <- ((indices - 1L) %% frequency) + 1L
+      season_means <- tapply(detrended, season_ids, mean, na.rm = TRUE)
+      seasonal_pattern <- rep(0, frequency)
+      if (length(season_means)) {
+        seasonal_pattern[as.integer(names(season_means))] <- season_means
+      }
+      seasonal_pattern <- seasonal_pattern - mean(seasonal_pattern, na.rm = TRUE)
+      seasonal_component <- seasonal_pattern[season_ids]
+      adjusted <- detrended - seasonal_component
+    } else {
+      seasonal_pattern <- rep(0, frequency)
+      seasonal_component <- rep(0, n_obs)
+      adjusted <- detrended
+      has_seasonal <- FALSE
+    }
+
+    qdat_adj[[var]] <- adjusted
+
+    transforms[[var]] <- list(
+      intercept = intercept,
+      slope = slope,
+      frequency = frequency,
+      seasonal = seasonal_pattern,
+      has_seasonal = has_seasonal,
+      last_index = n_obs
+    )
+  }
+
+  list(data = qdat_adj, transforms = transforms)
+}
+
+restore_series_values <- function(values, variables, indices, transforms) {
+  if (length(values) == 0) return(values)
+  if (missing(variables) || missing(indices)) {
+    stop("'variables' and 'indices' must be supplied when restoring series values.")
+  }
+  mapply(
+    function(val, var, idx) {
+      if (!is.finite(val) || is.na(idx) || !var %in% names(transforms)) {
+        return(val)
+      }
+      transform <- transforms[[var]]
+      trend <- transform$intercept + transform$slope * idx
+      if (isTRUE(transform$has_seasonal)) {
+        season_idx <- ((idx - 1L) %% transform$frequency) + 1L
+        seasonal <- transform$seasonal[season_idx]
+      } else {
+        seasonal <- 0
+      }
+      val + trend + seasonal
+    },
+    values,
+    variables,
+    indices,
+    SIMPLIFY = TRUE
+  )
+}
+
+compute_time_index <- function(train_rows, steps) {
+  stopifnot(length(train_rows) == 1)
+  train_rows + steps
 }
