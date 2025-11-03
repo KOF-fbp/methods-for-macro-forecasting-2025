@@ -86,12 +86,15 @@ estimate_mfvar_model <- function(Y, n_lags, n_fcst, seed = 123) {
   # the structured list created by build_Y(), containing both the
   # quarterly and monthly inputs the mfbvar package expects.
   set.seed(seed)
+  n_reps <- getOption("mfvar.n_reps", 4000L)
+  n_burnin <- getOption("mfvar.n_burnin", 2000L)
+  n_thin <- getOption("mfvar.n_thin", 4L)
   prior_obj <- mfbvar::set_prior(
     Y = Y,
     n_lags = n_lags,
-    n_reps = 4000,
-    n_burnin = 2000,
-    n_thin = 4,
+    n_reps = n_reps,
+    n_burnin = n_burnin,
+    n_thin = n_thin,
     n_fcst = n_fcst,
     d = "intercept",
     aggregation = "average",
