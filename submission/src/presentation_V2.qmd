@@ -72,18 +72,20 @@ $$
 
 ## Our MIDAS specification
 
-- AR(1) + trend, Beta weighting for monthly KOF barometer
+- AR(1) + trend
 $$
 y_t = \beta_0 + \phi\, y_{t-1} + \delta\, t + \sum_{k=0}^{K} \beta(k;\theta)\, x_{t-k/m} + \varepsilon_t
 $$
 
-## MIDAS results
+<!-- TODO: model specifications -->
+
+## MIDAS results {.smaller}
 
 ::: {.panel-tabset}
 
 ### Plot
 <!-- "../../data/metadata_quarterly.csv" -->
-![](midas_forecast_plot.png)
+![](midas_forecast_plot.png){width="80%"}
 
 ### Evaluation
 
@@ -109,14 +111,19 @@ $$ y_t = Z_t\,\alpha_t + \varepsilon_t, \quad \varepsilon_t \sim \mathcal{N}(0, 
 - Transition (VAR in companion form):
 $$ \alpha_t = T\,\alpha_{t-1} + R\,\eta_t, \quad \eta_t \sim \mathcal{N}(0, Q) $$
 
+
+<!-- i assume they are speaker notes, so i added them so you don't see them in the slides? -->
+::: {.notes}
 Notes
 - $Z_t$ selects which quarterly/monthly elements are observed at time $t$ (NA rows for not-yet-released data)
 - Priors: Minnesota on VAR coefficients, inverse-Wishart on $Q$ (error covariance)
 - Inference: Gibbs sampler draws $(B,\Sigma)$ and Kalman filter/smoother for $\alpha_t$
 
+:::
+
 ---
 
-## Data and transformations
+## Data and transformations {.smaller}
 
 - Quarterly targets (annualised): `gdp_growth`, `inflation`, `exch_rate`
 - Monthly indicator: KOF barometer (`kofbarometer`, fallback `ch.kof.barometer`)
@@ -140,7 +147,7 @@ knitr::asis_output("Key targets: gdp_growth, inflation, exch_rate; monthly KOF a
 
 ---
 
-## MF-VAR summary (from pipeline)
+## MF-VAR summary (from pipeline) {.smaller}
 
 ```{r, results='asis'}
 if (file.exists("mfvar_summary.txt")) {
@@ -184,24 +191,24 @@ if (file.exists("mfvar_summary.txt")) {
 
 ---
 
-## Benchmarks and comparisons
+## Benchmarks and comparisons {.smaller}
 
 ::: {.panel-tabset}
 
 ### Plots
-![](model_benchmark_plot.png)
+![](model_benchmark_plot.png){width="80%"}
 
 ### Per-variable plots
 
 ::: {.columns}
 ::: {.column}
-![](model_benchmark_plot_gdp_growth.png)
+![](model_benchmark_plot_gdp_growth.png){width="80%"}
 :::
 ::: {.column}
-![](model_benchmark_plot_inflation.png)
+![](model_benchmark_plot_inflation.png){width="80%"}
 :::
 ::: {.column}
-![](model_benchmark_plot_exch_rate.png)
+![](model_benchmark_plot_exch_rate.png){width="80%"}
 :::
 :::
 
@@ -217,7 +224,8 @@ if (!inherits(bm, "try-error")) {
 }
 ```
 
-### Metrics (by variable & step)
+### Metrics (by variable & step) 
+<!-- TODO: i think here it only shows part of the actual table, maybe we should try to get this to show all, or split it? -->
 ```{r}
 det <- try(read.csv("model_benchmark_holdout_detailed.csv"), silent = TRUE)
 if (!inherits(det, "try-error")) {
@@ -230,19 +238,24 @@ if (!inherits(det, "try-error")) {
 
 :::
 
-## Methodology: chosen model and estimation approach 
+## Methodology: chosen model and estimation approach {.smaller}
 
 - We estimate an MF-VAR with 5 lags, Minnesota prior and IW covariance; forecasts at steps 1–4
 - MIDAS baseline with AR(1)+trend using KOF barometer weights
 - Benchmarks: AR(2) and Random Walk with drift/trend for robustness
 
+::: {.notes}
 Notes
 - MIDAS can be seen as a reduced-form restriction on the MF-VAR using a weighting kernel
 - MF-VAR delivers coherent joint distributions and natural ragged-edge handling
+:::
 
-## Data: variables, frequency, sample 
+## Data: variables, frequency, sample {.smaller}
 
-- Quarterly targets: GDP growth (annualised), CPI inflation (annualised), log CHF/EUR exchange rate
+- Quarterly targets:
+    -  GDP growth (annualised)
+    - CPI inflation (annualised)
+    - log CHF/EUR exchange rate
 - Monthly indicator: KOF barometer; aggregation handled inside `mfbvar`
 - Sample: 1992–2025 (approx.), last quarter reserved for holdout
 
@@ -252,6 +265,25 @@ Notes
 - 1-year ahead: benchmarks sometimes win; MF-VAR improves with richer monthly information
 - See plots and tables for per-series details
 
+## Economic Indicator
+<!-- use monthly exchange rate for pred. monthly exchange rate? -->
+- data: 
+    - eu/ch policy rates, 
+    - labor market
+    - (exchange rates, inflation)
+- process: lag, matrix, check multicolinearity, weight
+
+## Work in Progress
+- extension: economic indicator
+- midas: adding different models, i.e. generalised, unrestricted, non-parametric, etc.
+- cross validation: rolling/expanding window
+
+## Questions:
+- Do we need to decide on either MIDAS or MF-VARs?
+- Can I use swissdata (kof intern) 
+
+<!-- Minna: do you guys think we can leave this out for the midterm presentation and instead focus more on what we want from him, i.e. questions and further To Dos. -->
+<!-- 
 ## Interpretation: economic meaning and intuition 
 
 - KOF barometer adds timeliness that benefits near-term GDP and inflation tracking
@@ -262,9 +294,9 @@ Notes
 
 - Mixed-frequency methods exploit monthly signals without waiting for quarterly releases
 - MF-VAR provides coherent multi-horizon forecasts and uncertainty; MIDAS is a fast, interpretable baseline
-- For policy nowcasting, prefer MF-VAR at short horizons; validate against simple benchmarks
+- For policy nowcasting, prefer MF-VAR at short horizons; validate against simple benchmarks -->
 
-## Reproducibility: code & data 
+## Reproducibility: code & data {.smaller}
 
 - Run MF-VAR pipeline from `submission/`:
   - `Rscript Draft_MFVAR.r` (uses `renv`, writes plots/tables to `submission/output/`)
