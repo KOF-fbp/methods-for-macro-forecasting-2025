@@ -303,6 +303,7 @@ print("Detailed errors by time period:")
 # print(eval_df |> select(-c('time')))
 print("\nSummary MSE/RMSE by model:")
 print(mse_results)
+write.csv(mse_results, file = "../../output/mse_results.csv")
 ```
 
 ```{r}
