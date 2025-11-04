@@ -15,6 +15,7 @@ if (!dir.exists(OUT_DIR)) dir.create(OUT_DIR, recursive = TRUE)
 
 target_vars <- target_variables
 forecast_steps <- c(1L, 4L)
+history_quarters <- 4L
 n_lags <- 5
 
 quarter_start_month <- function(q) {
@@ -291,6 +292,162 @@ ggplot2::ggsave(plot_path, width = 10, height = 6, dpi = 150)
 
 # --- Persist results --------------------------------------------------------
 readr::write_csv(metrics_tbl, file.path(OUT_DIR, "model_benchmark_metrics.csv"))
+convert_for_plot <- function(value, var) {
+  if (identical(var, "exch_rate")) {
+    exp(value)
+  } else {
+    value
+  }
+}
+
+summary_horizon_tbl <- metrics_tbl |>
+  dplyr::group_by(model, horizon) |>
+  dplyr::summarise(
+    rmse = mean(rmse, na.rm = TRUE),
+    mae = mean(mae, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  dplyr::mutate(
+    rmse = sprintf("%.4f", rmse),
+    mae = sprintf("%.4f", mae)
+  )
+
+summary_overall_tbl <- metrics_tbl |>
+  dplyr::group_by(model) |>
+  dplyr::summarise(
+    rmse = mean(rmse, na.rm = TRUE),
+    mae = mean(mae, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  dplyr::mutate(
+    rmse = sprintf("%.4f", rmse),
+    mae = sprintf("%.4f", mae)
+  )
+
+table_to_markdown <- function(df, headers) {
+  if (!nrow(df)) return(character())
+  header_line <- paste0("| ", paste(headers, collapse = " | "), " |")
+  separator_line <- paste0("|", paste(rep("---", length(headers)), collapse = "|"), "|")
+  body_lines <- apply(df, 1, function(row) paste0("| ", paste(row, collapse = " | "), " |"))
+  c(header_line, separator_line, body_lines)
+}
+
+summary_path <- file.path(OUT_DIR, "model_benchmark_summary.md")
+summary_lines <- c(
+  "# Benchmark Error Summary",
+  "",
+  "## Average RMSE and MAE by Horizon",
+  table_to_markdown(summary_horizon_tbl, c("Model", "Horizon", "Avg RMSE", "Avg MAE")),
+  "",
+  "## Overall Average Errors",
+  table_to_markdown(summary_overall_tbl, c("Model", "Avg RMSE", "Avg MAE"))
+)
+readr::write_lines(summary_lines, summary_path)
+
+plot_models <- c("Actual", "MF-VAR", "MIDAS (trend)", "MIDAS", "AR(2)", "RW-trend")
+colour_map <- c(
+  "Actual" = "#000000",
+  "MF-VAR" = "#1b9e77",
+  "MIDAS (trend)" = "#7570b3",
+  "MIDAS" = "#d95f02",
+  "AR(2)" = "#e7298a",
+  "RW-trend" = "#66a61e"
+)
+linetype_map <- c(
+  "Actual" = "solid",
+  "MF-VAR" = "solid",
+  "MIDAS (trend)" = "dashed",
+  "MIDAS" = "dashed",
+  "AR(2)" = "dotted",
+  "RW-trend" = "dotdash"
+)
+
+label_for_var <- function(var) {
+  switch(
+    var,
+    "gdp_growth" = "Annualised percentage",
+    "inflation" = "Annualised percentage",
+    "exch_rate" = "CHF per EUR",
+    "Value"
+  )
+}
+
+plot_paths <- purrr::map_chr(target_vars, function(var) {
+  history_values <- tail(q_train_orig[[var]], history_quarters)
+  history_dates <- zoo::as.Date(tail(q_train_orig$qtr, history_quarters), frac = 1)
+  history_df <- tibble::tibble(
+    quarter_end = history_dates,
+    model = factor("Actual", levels = plot_models),
+    display_value = convert_for_plot(history_values, var)
+  )
+
+  future_actual_df <- actual_tbl |>
+    dplyr::filter(variable == var, step_ahead <= max(forecast_steps)) |>
+    dplyr::mutate(
+      model = factor("Actual", levels = plot_models),
+      display_value = convert_for_plot(actual, var)
+    ) |>
+    dplyr::select(quarter_end, model, display_value)
+
+  actual_series <- dplyr::bind_rows(history_df, future_actual_df) |>
+    dplyr::arrange(quarter_end)
+
+  forecast_series <- predictions_tbl |>
+    dplyr::filter(variable == var, step_ahead <= max(forecast_steps)) |>
+    dplyr::mutate(
+      model = factor(model, levels = plot_models),
+      display_value = convert_for_plot(prediction, var)
+    ) |>
+    dplyr::select(quarter_end, model, display_value)
+
+  p <- ggplot2::ggplot() +
+    ggplot2::geom_line(
+      data = actual_series,
+      ggplot2::aes(x = quarter_end, y = display_value, colour = model, linetype = model),
+      linewidth = 1
+    ) +
+    ggplot2::geom_point(
+      data = actual_series,
+      ggplot2::aes(x = quarter_end, y = display_value, colour = model),
+      size = 2
+    ) +
+    ggplot2::geom_line(
+      data = forecast_series,
+      ggplot2::aes(x = quarter_end, y = display_value, colour = model, linetype = model, group = model),
+      linewidth = 0.8
+    ) +
+    ggplot2::geom_point(
+      data = forecast_series,
+      ggplot2::aes(x = quarter_end, y = display_value, colour = model),
+      size = 2
+    ) +
+    ggplot2::scale_colour_manual(values = colour_map, drop = FALSE) +
+    ggplot2::scale_linetype_manual(values = linetype_map, drop = FALSE) +
+    ggplot2::labs(
+      title = paste("Forecast comparison:", var),
+      subtitle = "History (last 4 quarters) with 1-step to 1-year-ahead forecasts",
+      x = "Quarter end",
+      y = label_for_var(var),
+      colour = NULL,
+      linetype = NULL
+    ) +
+    ggplot2::theme_minimal(base_size = 12) +
+    ggplot2::theme(legend.position = "bottom")
+
+  plot_path <- file.path(OUT_DIR, paste0("model_benchmark_plot_", var, ".png"))
+  ggplot2::ggsave(plot_path, plot = p, width = 8, height = 5, dpi = 150)
+  plot_path
+})
+
+readr::write_csv(metrics_tbl, file.path(OUT_DIR, "model_benchmark_metrics.csv"))
 readr::write_csv(forecast_wide, file.path(OUT_DIR, "model_benchmark_forecasts.csv"))
 
-cat("Benchmark comparison complete. Metrics written to output/model_benchmark_metrics.csv, forecasts to output/model_benchmark_forecasts.csv, and plot to output/model_benchmark_plot.png.\n")
+cat(
+  "Benchmark comparison complete.\n",
+  "  - output/model_benchmark_metrics.csv\n",
+  "  - output/model_benchmark_forecasts.csv\n",
+  "  - output/model_benchmark_summary.md\n",
+  paste0("  - ", plot_paths, collapse = "\n"),
+  "\n",
+  sep = ""
+)
