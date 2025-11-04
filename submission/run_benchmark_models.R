@@ -380,169 +380,26 @@ forecast_wide <- predictions_tbl |>
 stage_status(status = "done")
 
 stage_status("Cross-validation evaluation", "start")
-
-max_cv <- nrow(qdat_adj) - (n_lags + 2L)
-if (max_cv < 0L) max_cv <- 0L
-cv_horizon <- max_cv
-max_folds_opt <- getOption("mfvar.cv_max_folds", Inf)
-if (is.finite(max_folds_opt)) {
-  cv_horizon <- min(cv_horizon, max(0L, as.integer(max_folds_opt)))
-}
-
-if (cv_horizon < 1L) {
-  cv_results <- tibble::tibble(
-    variable = character(),
-    step_ahead = integer(),
-    prediction = numeric(),
-    model = character(),
-    actual = numeric(),
-    fold = integer(),
-    quarter_end = as.Date(character()),
-    horizon = character(),
-    error = numeric()
-  )
-  cv_metrics_tbl <- tibble::tibble(model = character(), horizon = character(), rmse = numeric(), mae = numeric(), observations = integer())
-  stage_status(status = "skip")
-} else {
-  cv_indices <- seq.int(nrow(qdat_adj) - cv_horizon + 1L, nrow(qdat_adj))
-  cv_records <- vector("list", length(cv_indices))
-
-  for (i in seq_along(cv_indices)) {
-    idx <- cv_indices[i]
-    train_rows_cv <- idx - 1L
-    if (train_rows_cv <= n_lags) {
-      cv_records[[i]] <- NULL
-      next
-    }
-
-    q_train_adj_cv <- qdat_adj |> dplyr::slice_head(n = train_rows_cv)
-    q_train_orig_cv <- qdat_orig |> dplyr::slice_head(n = train_rows_cv)
-    q_test_orig_cv <- qdat_orig |> dplyr::slice(idx)
-
-    baro_end_cv <- quarter_to_month_end(q_train_orig_cv$qtr[nrow(q_train_orig_cv)])
-    baro_train_cv <- stats::window(baro_ts, end = baro_end_cv)
-
-    mfvar_cv <- forecast_mfvar(
-      q_train_adj_cv,
-      baro_train_cv,
-      transforms,
-      n_lags,
-      horizon_quarters = 1L,
-      target_vars = target_vars,
-      seed = 200L + idx,
-      return_model = FALSE
-    )$predictions |>
-      dplyr::mutate(model = "MF-VAR")
-
-    ar_cv <- purrr::map_dfr(target_vars, function(var) {
-      preds_adj <- predict_ar2(q_train_adj_cv[[var]], 1L, var_label = var, context = sprintf("CV fold %d", idx))
-      tibble::tibble(
-        variable = var,
-        step_ahead = 1L,
-        prediction = restore_series_values(
-          preds_adj,
-          var,
-          compute_time_index(train_rows_cv, 1L),
-          transforms
-        ),
-        model = "AR(2)"
-      )
-    })
-
-    rw_cv <- purrr::map_dfr(target_vars, function(var) {
-      tibble::tibble(
-        variable = var,
-        step_ahead = 1L,
-        prediction = predict_rw_trend(q_train_orig_cv[[var]], 1L, var_label = var, context = sprintf("CV fold %d", idx)),
-        model = "RW-trend"
-      )
-    })
-
-    train_last_qtr_cv <- q_train_orig_cv$qtr[nrow(q_train_orig_cv)]
-    train_last_month_cv <- quarter_to_month_end(train_last_qtr_cv)
-    x_train_cv <- stats::window(x_series, end = train_last_month_cv)
-
-    x_future_cv <- stats::window(
-      x_series,
-      start = quarter_start_month(q_test_orig_cv$qtr),
-      end = quarter_to_month_end(q_test_orig_cv$qtr)
-    )
-
-    midas_trend_cv <- purrr::map_dfr(target_vars, function(var) {
-      preds <- forecast_midas_series(
-        y_ts_list[[var]],
-        train_rows_cv,
-        x_train_cv,
-        x_future_cv,
-        horizon = 1L,
-        include_trend = TRUE
-      )
-      tibble::tibble(variable = var, step_ahead = 1L, prediction = preds, model = "MIDAS (trend)")
-    })
-
-    midas_simple_cv <- purrr::map_dfr(target_vars, function(var) {
-      preds <- forecast_midas_series(
-        y_ts_list[[var]],
-        train_rows_cv,
-        x_train_cv,
-        x_future_cv,
-        horizon = 1L,
-        include_trend = FALSE
-      )
-      tibble::tibble(variable = var, step_ahead = 1L, prediction = preds, model = "MIDAS")
-    })
-
-    actual_cv <- tibble::tibble(
-      variable = target_vars,
-      step_ahead = 1L,
-      actual = q_test_orig_cv[target_vars] |> as.list() |> unlist(use.names = FALSE)
-    )
-
-    fold_df <- dplyr::bind_rows(
-      mfvar_cv,
-      ar_cv,
-      rw_cv,
-      midas_trend_cv,
-      midas_simple_cv
-    ) |>
-      dplyr::left_join(actual_cv, by = c("variable", "step_ahead")) |>
-      dplyr::mutate(
-        fold = idx,
-        quarter_end = zoo::as.Date(q_test_orig_cv$qtr, frac = 1),
-        horizon = "1-step ahead",
-        error = prediction - actual
-      )
-
-    cv_records[[i]] <- fold_df
-  }
-
-  cv_results_list <- cv_records |> purrr::compact()
-  cv_results <- if (length(cv_results_list)) {
-    dplyr::bind_rows(cv_results_list)
-  } else {
-    tibble::tibble(
-      variable = character(),
-      step_ahead = integer(),
-      prediction = numeric(),
-      model = character(),
-      actual = numeric(),
-      fold = integer(),
-      quarter_end = as.Date(character()),
-      horizon = character(),
-      error = numeric()
-    )
-  }
-
-  cv_metrics_tbl <- if (nrow(cv_results)) {
-    cv_results |>
-      dplyr::group_by(model, horizon) |>
-      summarise_metrics()
-  } else {
-    tibble::tibble(model = character(), horizon = character(), rmse = numeric(), mae = numeric(), observations = integer())
-  }
-
-  stage_status(status = "done")
-}
+# Cross-validation temporarily disabled; producing empty results.
+cv_results <- tibble::tibble(
+  variable = character(),
+  step_ahead = integer(),
+  prediction = numeric(),
+  model = character(),
+  actual = numeric(),
+  fold = integer(),
+  quarter_end = as.Date(character()),
+  horizon = character(),
+  error = numeric()
+)
+cv_metrics_tbl <- tibble::tibble(
+  model = character(),
+  horizon = character(),
+  rmse = numeric(),
+  mae = numeric(),
+  observations = integer()
+)
+stage_status(status = "skip")
 
 # --- Output summaries and plots --------------------------------------------
 stage_status("Output generation", "start")
