@@ -68,11 +68,16 @@ print(mse)
 
 ## Why MF-VAR?
 
-# Do we have to choose a model, or can we do both?
+
+## MIDAS vs. MF-VAR
+- pros and cons MIDAS and MF-VAR
+- MIDAS is reduced form of MF-VAR 
+- MIDAS is a lot cheaper than MF-VAR
+
+
 
 ## Methodology: chosen model and estimation approach 
 - MF-VAR or MIDAS? 
-- pros and cons MIDAS and MF-VAR, MIDAS is reduced form of MF-VAR 
 
 ## Data: variables, frequency, sample period 
 - Description of data that we were provided + the additional data that we decided to use 
@@ -85,6 +90,11 @@ tbd
 
 ## Takeaways: main findings and policy relevance 
 tbd 
+
+## Questions for Mid-Term Meeting
+- do we need to choose a model, or can we do both?
+- what questions would you ask when seeing our equations on the slides?
+- how extensive does our economic indicator need to be?
 
 ## Reproducibility: GitHub repository with code & data 
 
