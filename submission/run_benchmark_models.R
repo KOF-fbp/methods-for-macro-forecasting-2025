@@ -213,17 +213,20 @@ actual_tbl <- q_test_orig |>
   )
 
 # --- Metrics for specified horizons ----------------------------------------
-metrics_tbl <- predictions_tbl |>
+metric_inputs <- predictions_tbl |>
   dplyr::inner_join(actual_tbl, by = c("variable", "step_ahead", "quarter_end", "horizon")) |>
   dplyr::filter(step_ahead %in% forecast_steps) |>
-  dplyr::mutate(error = prediction - actual) |>
-  dplyr::group_by(variable, model, horizon) |>
+  dplyr::mutate(error = prediction - actual)
+
+metrics_tbl <- metric_inputs |>
+  dplyr::group_by(model, horizon) |>
   dplyr::summarise(
     rmse = sqrt(mean(error^2, na.rm = TRUE)),
     mae = mean(abs(error), na.rm = TRUE),
+    observations = dplyr::n(),
     .groups = "drop"
   ) |>
-  dplyr::arrange(variable, horizon, model)
+  dplyr::arrange(horizon, model)
 
 # --- Forecast table (wide) -------------------------------------------------
 forecast_wide <- predictions_tbl |>
@@ -301,28 +304,27 @@ convert_for_plot <- function(value, var) {
 }
 
 summary_horizon_tbl <- metrics_tbl |>
-  dplyr::group_by(model, horizon) |>
-  dplyr::summarise(
-    rmse = mean(rmse, na.rm = TRUE),
-    mae = mean(mae, na.rm = TRUE),
-    .groups = "drop"
-  ) |>
   dplyr::mutate(
-    rmse = sprintf("%.4f", rmse),
-    mae = sprintf("%.4f", mae)
-  )
+    rmse_fmt = sprintf("%.4f", rmse),
+    mae_fmt = sprintf("%.4f", mae),
+    obs_fmt = as.character(observations)
+  ) |>
+  dplyr::select(model, horizon, obs_fmt, rmse_fmt, mae_fmt)
 
-summary_overall_tbl <- metrics_tbl |>
+summary_overall_tbl <- metric_inputs |>
   dplyr::group_by(model) |>
   dplyr::summarise(
-    rmse = mean(rmse, na.rm = TRUE),
-    mae = mean(mae, na.rm = TRUE),
+    rmse = sqrt(mean(error^2, na.rm = TRUE)),
+    mae = mean(abs(error), na.rm = TRUE),
+    observations = dplyr::n(),
     .groups = "drop"
   ) |>
   dplyr::mutate(
-    rmse = sprintf("%.4f", rmse),
-    mae = sprintf("%.4f", mae)
-  )
+    rmse_fmt = sprintf("%.4f", rmse),
+    mae_fmt = sprintf("%.4f", mae),
+    obs_fmt = as.character(observations)
+  ) |>
+  dplyr::select(model, obs_fmt, rmse_fmt, mae_fmt)
 
 table_to_markdown <- function(df, headers) {
   if (!nrow(df)) return(character())
@@ -336,11 +338,11 @@ summary_path <- file.path(OUT_DIR, "model_benchmark_summary.md")
 summary_lines <- c(
   "# Benchmark Error Summary",
   "",
-  "## Average RMSE and MAE by Horizon",
-  table_to_markdown(summary_horizon_tbl, c("Model", "Horizon", "Avg RMSE", "Avg MAE")),
+  "## RMSE and MAE by Horizon (aggregated across variables)",
+  table_to_markdown(summary_horizon_tbl, c("Model", "Horizon", "Observations", "RMSE", "MAE")),
   "",
   "## Overall Average Errors",
-  table_to_markdown(summary_overall_tbl, c("Model", "Avg RMSE", "Avg MAE"))
+  table_to_markdown(summary_overall_tbl, c("Model", "Observations", "RMSE", "MAE"))
 )
 readr::write_lines(summary_lines, summary_path)
 
