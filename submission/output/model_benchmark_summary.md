@@ -24,10 +24,3 @@
 | RW-trend | 12 | 0.8732 | 0.4889 |
 
 ## Rolling 1-step Cross-Validation RMSE and MAE
-| Model | Horizon | Observations | RMSE | MAE |
-|---|---|---|---|---|
-| AR(2) | 1-step ahead | 381 | 2.7980 | 1.1143 |
-| MF-VAR | 1-step ahead | 375 | 3.7788 | 1.3114 |
-| MIDAS | 1-step ahead | 381 | 2.7632 | 1.0890 |
-| MIDAS (trend) | 1-step ahead | 378 | 2.9425 | 1.1739 |
-| RW-trend | 1-step ahead | 381 | 3.8286 | 1.3119 |
