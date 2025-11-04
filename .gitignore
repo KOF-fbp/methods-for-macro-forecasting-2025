@@ -52,3 +52,7 @@ rsconnect/
 **/.DS_Store
 .DS_Store
 **/.DS_Store
+
+# Quarto outputs in submission/src: ignore generated HTML alongside .qmd
+submission/src/**/*.html
+submission/src/**/*_files/
