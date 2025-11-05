@@ -79,6 +79,29 @@ $$
 
 <!-- TODO: model specifications -->
 
+## (MIDAS) Models
+
+::: {.panel-tabset}
+
+### MIDAS w/ AR(1) + trend
+
+```r
+m_ar1_t <- midas_r(
+  y_train ~ 
+  trend_train + # incl. trend 
+  mls(y_train, k=1, m=1) + # AR(1)
+  fmls(x_train, k=2, m=3), 
+  start = list(x_train = rep(0, 3))
+  )
+```
+
+### Random Walk
+
+```r
+rw_drift <- forecast::auto.arima(y_train) # ARIMA (0,1,0)
+```
+:::
+
 ## MIDAS results {.smaller}
 
 ::: {.panel-tabset}
@@ -271,7 +294,7 @@ Notes
     - eu/ch policy rates, 
     - labor market
     - (exchange rates, inflation)
-- process: lag, matrix, check multicolinearity, weight
+- process: lag, matrix, check multi-colinearity, weight
 
 ## Work in Progress
 - extension: economic indicator
@@ -279,6 +302,7 @@ Notes
 - cross validation: rolling/expanding window
 
 ## Questions:
+- How much detail should we each go into our own approaches?
 - Do we need to decide on either MIDAS or MF-VARs?
 - Can I use swissdata (kof intern) 
 
