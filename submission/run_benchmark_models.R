@@ -1,5 +1,14 @@
 #!/usr/bin/env Rscript
 
+if (!interactive()) {
+  args_all <- commandArgs(trailingOnly = FALSE)
+  file_arg <- grep("^--file=", args_all, value = TRUE)
+  if (length(file_arg)) {
+    script_path <- normalizePath(sub("^--file=", "", file_arg[1]), winslash = "/", mustWork = TRUE)
+    setwd(dirname(script_path))
+  }
+}
+
 source(file.path("R", "setup.R"))
 source(file.path("R", "data_processing.R"))
 source(file.path("R", "evaluation.R"))
@@ -71,6 +80,29 @@ label_for_var <- function(var) {
     "inflation" = "Annualised percentage",
     "exch_rate" = "CHF per EUR",
     "Value"
+  )
+}
+
+months_per_quarter <- 3L
+
+add_months <- function(year_month, n) {
+  stopifnot(length(year_month) == 2L)
+  total_months <- as.integer(year_month[1]) * 12L + (as.integer(year_month[2]) - 1L) + as.integer(n)
+  if (total_months < 0L) {
+    stop("Month arithmetic produced a negative index; check the inputs.")
+  }
+  new_year <- total_months %/% 12L
+  new_month <- (total_months %% 12L) + 1L
+  c(new_year, new_month)
+}
+
+coverage_label <- function(extra_months) {
+  dplyr::case_when(
+    extra_months == 0L ~ "Cutoff only",
+    extra_months == 1L ~ "Cutoff +1m",
+    extra_months == 2L ~ "Cutoff +2m",
+    extra_months == 3L ~ "Cutoff +3m",
+    TRUE ~ sprintf("Cutoff +%dm", extra_months)
   )
 }
 
@@ -179,6 +211,264 @@ table_to_markdown <- function(df, headers) {
   c(header_line, separator_line, body_lines)
 }
 
+run_benchmark_cross_validation <- function(
+    qdat_adj,
+    qdat_orig,
+    transforms,
+    baro_ts,
+    baro_diff_series,
+    y_ts_list,
+    target_vars,
+    forecast_steps,
+    n_lags,
+    extra_months_options = 0:3,
+    initial_train_quarter = zoo::as.yearqtr("2015 Q4"),
+    progress = TRUE) {
+
+  horizon_max <- max(forecast_steps)
+  horizon_steps <- seq_len(horizon_max)
+  horizon_months <- horizon_max * months_per_quarter
+  n_obs <- nrow(qdat_adj)
+
+  if (!inherits(initial_train_quarter, "yearqtr")) {
+    initial_train_quarter <- zoo::as.yearqtr(initial_train_quarter)
+  }
+
+  initial_index <- match(initial_train_quarter, qdat_orig$qtr)
+  if (is.na(initial_index)) {
+    stop("Initial training quarter ", initial_train_quarter, " not found in the quarterly data.")
+  }
+
+  cv_start_idx <- initial_index + 1L
+  cv_end_idx <- n_obs - horizon_max + 1L
+  if (cv_end_idx < cv_start_idx) {
+    warning("Not enough observations to run cross-validation with the requested horizon.")
+    return(list(
+      results = tibble::tibble(),
+      metrics_by_horizon = tibble::tibble(),
+      metrics_overall = tibble::tibble(),
+      folds = tibble::tibble(),
+      fold_count = 0L,
+      extra_values = extra_months_options
+    ))
+  }
+
+  cv_indices <- seq.int(cv_start_idx, cv_end_idx)
+  total_folds <- length(cv_indices)
+
+  prediction_records <- vector("list", total_folds * max(1L, length(extra_months_options)))
+  actual_records <- vector("list", total_folds)
+  pred_counter <- 0L
+
+  for (fold_pos in seq_along(cv_indices)) {
+    idx <- cv_indices[fold_pos]
+    train_rows <- idx - 1L
+    if (train_rows <= n_lags) {
+      next
+    }
+
+    q_train_adj <- dplyr::slice_head(qdat_adj, n = train_rows)
+    q_train_orig <- dplyr::slice_head(qdat_orig, n = train_rows)
+    q_eval_orig <- dplyr::slice(qdat_orig, idx:(idx + horizon_max - 1L))
+
+    cutoff_quarter <- q_train_orig$qtr[nrow(q_train_orig)]
+    cutoff_label <- as.character(cutoff_quarter)
+    forecast_quarters <- q_eval_orig$qtr
+    quarter_end_dates <- zoo::as.Date(forecast_quarters, frac = 1)
+
+    if (isTRUE(progress)) {
+      message(sprintf("  • CV fold %02d/%02d | training through %s", fold_pos, total_folds, cutoff_label))
+    }
+
+    actual_fold <- q_eval_orig |>
+      dplyr::mutate(step_ahead = dplyr::row_number()) |>
+      dplyr::select(step_ahead, tidyselect::all_of(target_vars)) |>
+      tidyr::pivot_longer(
+        cols = -step_ahead,
+        names_to = "variable",
+        values_to = "actual"
+      ) |>
+      dplyr::mutate(
+        quarter_end = quarter_end_dates[step_ahead],
+        horizon = label_horizon(step_ahead),
+        fold_index = idx,
+        cutoff_quarter = cutoff_label,
+        forecast_quarter = as.character(forecast_quarters[step_ahead])
+      )
+
+    actual_records[[fold_pos]] <- actual_fold
+
+    time_indices <- compute_time_index(train_rows, horizon_steps)
+
+    ar_base <- purrr::map_dfr(target_vars, function(var) {
+      preds_adj <- predict_ar2(q_train_adj[[var]], horizon_max, var_label = var, context = sprintf("CV fold ending %s", cutoff_label))
+      preds_orig <- restore_series_values(
+        preds_adj,
+        rep(var, horizon_max),
+        time_indices,
+        transforms
+      )
+      tibble::tibble(
+        variable = var,
+        step_ahead = horizon_steps,
+        prediction = preds_orig,
+        model = "AR(2)"
+      )
+    })
+
+    rw_base <- purrr::map_dfr(target_vars, function(var) {
+      preds <- predict_rw_trend(q_train_orig[[var]], horizon_max, var_label = var, context = sprintf("CV fold ending %s", cutoff_label))
+      tibble::tibble(
+        variable = var,
+        step_ahead = horizon_steps,
+        prediction = preds,
+        model = "RW-trend"
+      )
+    })
+
+    train_last_month <- quarter_to_month_end(cutoff_quarter)
+    x_train_full <- stats::window(baro_diff_series, end = train_last_month)
+
+    if (length(x_train_full) != train_rows * months_per_quarter) {
+      warning(sprintf("Skipping fold %s: monthly regressor length mismatch.", cutoff_label), call. = FALSE)
+      actual_records[[fold_pos]] <- NULL
+      next
+    }
+
+    future_start <- add_months(train_last_month, 1L)
+    future_end <- add_months(train_last_month, horizon_months)
+    x_future_actual <- try(stats::window(baro_diff_series, start = future_start, end = future_end), silent = TRUE)
+    x_future_actual_vec <- if (inherits(x_future_actual, "try-error") || length(x_future_actual) == 0L) {
+      numeric(0)
+    } else {
+      as.numeric(x_future_actual)
+    }
+
+    for (extra_months in extra_months_options) {
+      baro_end <- add_months(train_last_month, extra_months)
+      baro_train <- stats::window(baro_ts, end = baro_end)
+
+      mfvar_pred <- forecast_mfvar(
+        q_train_adj,
+        baro_train,
+        transforms,
+        n_lags,
+        horizon_max,
+        target_vars,
+        seed = 1000L + idx * 10L + extra_months,
+        return_model = FALSE
+      )$predictions |>
+        tidyr::complete(
+          variable = target_vars,
+          step_ahead = horizon_steps,
+          fill = list(prediction = NA_real_)
+        ) |>
+        dplyr::mutate(model = "MF-VAR")
+
+  fill_value <- if (length(x_train_full)) utils::tail(x_train_full, 1) else 0
+      x_future_vec <- rep(fill_value, horizon_months)
+      observed_months <- min(extra_months, length(x_future_actual_vec))
+      if (observed_months > 0) {
+        x_future_vec[seq_len(observed_months)] <- x_future_actual_vec[seq_len(observed_months)]
+      }
+      x_future_ts <- stats::ts(x_future_vec, start = future_start, frequency = 12)
+
+      midas_trend_pred <- purrr::map_dfr(target_vars, function(var) {
+        preds <- forecast_midas_series(
+          y_series = y_ts_list[[var]],
+          train_rows = train_rows,
+          x_train = x_train_full,
+          x_future = x_future_ts,
+          horizon = horizon_max,
+          include_trend = TRUE
+        )
+        tibble::tibble(variable = var, step_ahead = horizon_steps, prediction = preds, model = "MIDAS (trend)")
+      })
+
+      midas_simple_pred <- purrr::map_dfr(target_vars, function(var) {
+        preds <- forecast_midas_series(
+          y_series = y_ts_list[[var]],
+          train_rows = train_rows,
+          x_train = x_train_full,
+          x_future = x_future_ts,
+          horizon = horizon_max,
+          include_trend = FALSE
+        )
+        tibble::tibble(variable = var, step_ahead = horizon_steps, prediction = preds, model = "MIDAS")
+      })
+
+      scenario_predictions <- dplyr::bind_rows(
+        mfvar_pred,
+        midas_trend_pred,
+        midas_simple_pred,
+        ar_base,
+        rw_base
+      ) |>
+        dplyr::mutate(
+          extra_months = extra_months,
+          fold_index = idx,
+          cutoff_quarter = cutoff_label,
+          forecast_quarter = as.character(forecast_quarters[step_ahead]),
+          quarter_end = quarter_end_dates[step_ahead],
+          horizon = label_horizon(step_ahead)
+        )
+
+      pred_counter <- pred_counter + 1L
+      prediction_records[[pred_counter]] <- scenario_predictions
+    }
+  }
+
+  predictions_tbl <- dplyr::bind_rows(Filter(Negate(is.null), prediction_records))
+  actual_tbl <- dplyr::bind_rows(Filter(Negate(is.null), actual_records))
+
+  if (!nrow(predictions_tbl) || !nrow(actual_tbl)) {
+    warning("Cross-validation produced no predictions after filtering.")
+    return(list(
+      results = tibble::tibble(),
+      metrics_by_horizon = tibble::tibble(),
+      metrics_overall = tibble::tibble(),
+      folds = tibble::tibble(),
+      fold_count = 0L,
+      extra_values = extra_months_options
+    ))
+  }
+
+  cv_results <- predictions_tbl |>
+    dplyr::left_join(
+      actual_tbl,
+      by = c(
+        "variable", "step_ahead", "quarter_end", "horizon",
+        "fold_index", "cutoff_quarter", "forecast_quarter"
+      )
+    ) |>
+    dplyr::mutate(error = prediction - actual)
+
+  metrics_by_horizon <- cv_results |>
+    dplyr::filter(step_ahead %in% forecast_steps) |>
+    dplyr::group_by(extra_months, model, horizon) |>
+    summarise_metrics() |>
+    dplyr::arrange(extra_months, model, horizon)
+
+  metrics_overall <- cv_results |>
+    dplyr::filter(step_ahead %in% forecast_steps) |>
+    dplyr::group_by(extra_months, model) |>
+    summarise_metrics() |>
+    dplyr::arrange(extra_months, model)
+
+  folds_info <- cv_results |>
+    dplyr::distinct(fold_index, cutoff_quarter, forecast_quarter) |>
+    dplyr::arrange(fold_index, forecast_quarter)
+
+  list(
+    results = cv_results,
+    metrics_by_horizon = metrics_by_horizon,
+    metrics_overall = metrics_overall,
+    folds = folds_info,
+    fold_count = dplyr::n_distinct(cv_results$fold_index),
+    extra_values = sort(unique(cv_results$extra_months))
+  )
+}
+
 qdat_raw <- read_quarterly_data(DATA_DIR)
 baro_raw <- fetch_kof_barometer()
 trimmed <- trim_to_overlap(qdat_raw, baro_raw)
@@ -187,6 +477,24 @@ qdat_orig <- trimmed$qdat
 qdat_adj <- stationary$data
 transforms <- stationary$transforms
 baro_ts <- window_baro(trimmed$baro_ts, qdat_orig)
+
+baro_diff_series <- local({
+  first_quarter_date <- zoo::as.Date(qdat_orig$qtr[1], frac = 0)
+  prev_year <- lubridate::year(first_quarter_date)
+  prev_month <- (lubridate::quarter(first_quarter_date) - 1L) * months_per_quarter
+  if (prev_month == 0L) {
+    prev_month <- 12L
+    prev_year <- prev_year - 1L
+  }
+
+  diff_source <- stats::window(baro_ts, start = c(prev_year, prev_month))
+  diff_series <- base::diff(diff_source)
+  first_month_of_quarter <- (lubridate::quarter(first_quarter_date) - 1L) * months_per_quarter + 1L
+  stats::window(
+    diff_series,
+    start = c(lubridate::year(first_quarter_date), first_month_of_quarter)
+  )
+})
 
 stage_status("Data preparation", "start")
 
@@ -208,37 +516,25 @@ q_test_orig <- qdat_orig |> dplyr::slice_tail(n = eval_horizon)
 forecast_quarters <- q_test_orig$qtr
 forecast_dates <- zoo::as.Date(forecast_quarters, frac = 1)
 
-prev_year <- lubridate::year(zoo::as.Date(qdat_orig$qtr[1], frac = 0))
-prev_month <- ((lubridate::quarter(zoo::as.Date(qdat_orig$qtr[1], frac = 0)) - 1L) * 3L)
-if (prev_month == 0L) {
-  prev_month <- 12L
-  prev_year <- prev_year - 1L
-}
+stage_status(status = "done")
 
-xx0 <- stats::window(baro_ts, start = c(prev_year, prev_month))
-x_series <- base::diff(xx0)
-first_month_of_quarter <- ((lubridate::quarter(zoo::as.Date(qdat_orig$qtr[1], frac = 0)) - 1L) * 3L) + 1L
-x_series <- stats::window(x_series, start = c(lubridate::year(zoo::as.Date(qdat_orig$qtr[1], frac = 0)), first_month_of_quarter))
+stage_status("Holdout evaluation", "start")
 
 train_last_qtr <- q_train_orig$qtr[nrow(q_train_orig)]
 train_last_month <- quarter_to_month_end(train_last_qtr)
-x_train_full <- stats::window(x_series, end = train_last_month)
+x_train_full <- stats::window(baro_diff_series, end = train_last_month)
 
-if (length(x_train_full) != train_rows * 3L) {
+if (length(x_train_full) != train_rows * months_per_quarter) {
   stop("Monthly regressor length does not match the training sample.")
 }
 
 test_start_month <- quarter_start_month(forecast_quarters[1])
 test_end_month <- quarter_to_month_end(forecast_quarters[eval_horizon])
-x_future_full <- stats::window(x_series, start = test_start_month, end = test_end_month)
+x_future_full <- stats::window(baro_diff_series, start = test_start_month, end = test_end_month)
 
-if (length(x_future_full) != eval_horizon * 3L) {
+if (length(x_future_full) != eval_horizon * months_per_quarter) {
   stop("Monthly regressor length does not cover the holdout horizon.")
 }
-
-stage_status(status = "done")
-
-stage_status("Holdout evaluation", "start")
 
 baro_train_end <- quarter_to_month_end(q_train_orig$qtr[nrow(q_train_orig)])
 baro_train <- stats::window(baro_ts, end = baro_train_end)
@@ -277,34 +573,6 @@ rw_holdout <- purrr::map_dfr(target_vars, function(var) {
     model = "RW-trend"
   )
 })
-
-prev_year <- lubridate::year(zoo::as.Date(qdat_orig$qtr[1], frac = 0))
-prev_month <- ((lubridate::quarter(zoo::as.Date(qdat_orig$qtr[1], frac = 0)) - 1L) * 3L)
-if (prev_month == 0L) {
-  prev_month <- 12L
-  prev_year <- prev_year - 1L
-}
-
-xx0 <- stats::window(baro_ts, start = c(prev_year, prev_month))
-x_series <- base::diff(xx0)
-first_month_of_quarter <- ((lubridate::quarter(zoo::as.Date(qdat_orig$qtr[1], frac = 0)) - 1L) * 3L) + 1L
-x_series <- stats::window(x_series, start = c(lubridate::year(zoo::as.Date(qdat_orig$qtr[1], frac = 0)), first_month_of_quarter))
-
-train_last_qtr <- q_train_orig$qtr[nrow(q_train_orig)]
-train_last_month <- quarter_to_month_end(train_last_qtr)
-x_train_full <- stats::window(x_series, end = train_last_month)
-
-if (length(x_train_full) != train_rows * 3L) {
-  stop("Monthly regressor length does not match the training sample.")
-}
-
-test_start_month <- quarter_start_month(forecast_quarters[1])
-test_end_month <- quarter_to_month_end(forecast_quarters[eval_horizon])
-x_future_full <- stats::window(x_series, start = test_start_month, end = test_end_month)
-
-if (length(x_future_full) != eval_horizon * 3L) {
-  stop("Monthly regressor length does not cover the holdout horizon.")
-}
 
 midas_trend_holdout <- purrr::map_dfr(target_vars, function(var) {
   preds <- forecast_midas_series(
@@ -380,26 +648,39 @@ forecast_wide <- predictions_tbl |>
 stage_status(status = "done")
 
 stage_status("Cross-validation evaluation", "start")
-# Cross-validation temporarily disabled; producing empty results.
-cv_results <- tibble::tibble(
-  variable = character(),
-  step_ahead = integer(),
-  prediction = numeric(),
-  model = character(),
-  actual = numeric(),
-  fold = integer(),
-  quarter_end = as.Date(character()),
-  horizon = character(),
-  error = numeric()
+
+cv_initial_quarter <- zoo::as.yearqtr("2015 Q4")
+cv_extra_months <- 0:3
+cv_output <- run_benchmark_cross_validation(
+  qdat_adj = qdat_adj,
+  qdat_orig = qdat_orig,
+  transforms = transforms,
+  baro_ts = baro_ts,
+  baro_diff_series = baro_diff_series,
+  y_ts_list = y_ts_list,
+  target_vars = target_vars,
+  forecast_steps = forecast_steps,
+  n_lags = n_lags,
+  extra_months_options = cv_extra_months,
+  initial_train_quarter = cv_initial_quarter,
+  progress = TRUE
 )
-cv_metrics_tbl <- tibble::tibble(
-  model = character(),
-  horizon = character(),
-  rmse = numeric(),
-  mae = numeric(),
-  observations = integer()
-)
-stage_status(status = "skip")
+
+cv_results <- cv_output$results
+cv_metrics_tbl <- cv_output$metrics_by_horizon
+cv_metrics_overall <- cv_output$metrics_overall
+cv_folds_tbl <- cv_output$folds
+
+if (!nrow(cv_results)) {
+  stage_status(status = "skip")
+} else {
+  stage_status(status = "done")
+  message(sprintf(
+    "Cross-validation processed %d folds across %d coverage settings.",
+    cv_output$fold_count,
+    length(cv_output$extra_values)
+  ))
+}
 
 # --- Output summaries and plots --------------------------------------------
 stage_status("Output generation", "start")
@@ -422,12 +703,14 @@ summary_overall_tbl <- metric_inputs |>
   dplyr::select(model, Observations, RMSE, MAE)
 
 summary_cv_tbl <- cv_metrics_tbl |>
+  dplyr::arrange(extra_months, model, horizon) |>
   dplyr::mutate(
+    `Monthly data` = coverage_label(extra_months),
     RMSE = sprintf("%.4f", rmse),
     MAE = sprintf("%.4f", mae),
     Observations = as.character(observations)
   ) |>
-  dplyr::select(model, horizon, Observations, RMSE, MAE)
+  dplyr::select(`Monthly data`, model, horizon, Observations, RMSE, MAE)
 
 summary_path <- file.path(OUT_DIR, "model_benchmark_summary.md")
 summary_lines <- c(
@@ -439,8 +722,8 @@ summary_lines <- c(
   "## Holdout Overall Average Errors",
   table_to_markdown(summary_overall_tbl, c("Model", "Observations", "RMSE", "MAE")),
   "",
-  "## Rolling 1-step Cross-Validation RMSE and MAE",
-  table_to_markdown(summary_cv_tbl, c("Model", "Horizon", "Observations", "RMSE", "MAE"))
+  "## Rolling Cross-Validation RMSE and MAE by Monthly Coverage",
+  table_to_markdown(summary_cv_tbl, c("Monthly data", "Model", "Horizon", "Observations", "RMSE", "MAE"))
 )
 readr::write_lines(summary_lines, summary_path)
 
@@ -529,11 +812,21 @@ plot_paths <- purrr::map_chr(target_vars, function(var) {
   plot_path
 })
 
+cv_metrics_export <- cv_metrics_tbl |>
+  dplyr::mutate(monthly_coverage = coverage_label(extra_months)) |>
+  dplyr::relocate(monthly_coverage, .before = model)
+
+cv_results_export <- cv_results |>
+  dplyr::mutate(monthly_coverage = coverage_label(extra_months)) |>
+  dplyr::rename(fold = fold_index) |>
+  dplyr::relocate(monthly_coverage, extra_months, fold, cutoff_quarter, forecast_quarter, .before = variable) |>
+  dplyr::arrange(extra_months, fold, variable, step_ahead)
+
 readr::write_csv(metrics_tbl, file.path(OUT_DIR, "model_benchmark_metrics.csv"))
 readr::write_csv(holdout_metrics_detailed, file.path(OUT_DIR, "model_benchmark_holdout_detailed.csv"))
 readr::write_csv(forecast_wide, file.path(OUT_DIR, "model_benchmark_forecasts.csv"))
-readr::write_csv(cv_metrics_tbl, file.path(OUT_DIR, "model_benchmark_cv_metrics.csv"))
-readr::write_csv(cv_results, file.path(OUT_DIR, "model_benchmark_cv_predictions.csv"))
+readr::write_csv(cv_metrics_export, file.path(OUT_DIR, "model_benchmark_cv_metrics.csv"))
+readr::write_csv(cv_results_export, file.path(OUT_DIR, "model_benchmark_cv_predictions.csv"))
 
 cat(
   "Benchmark comparison complete.\n",

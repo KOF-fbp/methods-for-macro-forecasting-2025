@@ -1,33 +1,42 @@
 # Copilot Instructions
 
-## Repository Layout
-- Focus work in `submission/`; everything else is teaching material or references.
-- `Draft_MFVAR.r` orchestrates the mixed-frequency VAR pipeline by sourcing helpers in `submission/R/`.
-- `main.R` is a lightweight smoke-test used by Docker/CI; do not add business logic there.
-- Outputs are written to `submission/output/` and the completion `message()` in `Draft_MFVAR.r` is used as an automation signal.
+## Overview
+- Active work sits in `submission/`; teaching material lives elsewhere.
+- `Draft_MFVAR.r` is the MF-VAR orchestrator (ingest → evaluation → estimation → outputs) sourcing helpers under `submission/R/`.
+- `run_benchmark_models.R` extends the workflow with MIDAS and multi-coverage comparisons, emitting `model_benchmark_*` artefacts.
+- Core outputs land in `submission/output/` and the closing `message()` in `Draft_MFVAR.r` signals automation that the run finished.
 
 ## Data Contracts
-- Quarterly inputs live in `submission/data/data_quarterly.csv` and must keep the columns `date`, `rvgdp`, `cpi`, `wkfreuro` with `%Y-%m` timestamps.
-- `read_quarterly_data()` converts those columns into `gdp_growth`, `inflation`, and logged `exch_rate`; downstream code assumes these exact names and annualised units.
-- Update `submission/data/metadata_quarterly*.csv` whenever the quarterly dataset schema changes to keep provenance consistent.
-- `fetch_kof_barometer()` pulls the monthly KOF barometer (`kofbarometer` fallback `ch.kof.barometer`); provide a cached `ts` when working offline instead of rewriting callers.
+- Quarterly data (`submission/data/data_quarterly.csv`) must keep `date`, `rvgdp`, `cpi`, `wkfreuro` with `%Y-%m`; ingestion halts if any column is missing.
+- `read_quarterly_data()` builds `gdp_growth`, `inflation`, `exch_rate` (annualised log differences except the logged FX level); downstream code assumes these exact names.
+- `fetch_kof_barometer()` tries `kofbarometer` then `ch.kof.barometer`; during outages, hand a cached `ts` to the same function signature rather than editing callers.
+- `trim_to_overlap()` and `window_baro()` clip quarters to available barometer data and extend two months pre-sample; changing them alters every forecast so double-check before modifying.
+- Keep `submission/data/metadata_quarterly*.csv` aligned with any column or units change in the quarterly dataset.
 
-## Pipeline Architecture
-- `activate_project()` (in `R/setup.R`) sets the working directory and activates `renv`; scripts depend on it before touching the filesystem.
-- `stationarise_quarterly()` detrends and deseasonalises series while storing parameters in `transforms`; `restore_series_values()` depends on these for back-transforming forecasts.
-- `build_Y()` packages the aligned quarterly and monthly series exactly as `mfbvar::set_prior()` expects; keep the structure when extending variables.
-- `estimate_mfvar_model()` fixes Minnesota/Inverse-Wishart priors with options `mfvar.n_*`; adjust lag length, draws, and forecast horizon together to avoid mismatched burn-in settings.
-- `predict_ar2()` and `predict_rw_trend()` implement benchmark models used in both holdout and CV evaluation; retain their multi-method fallbacks to keep evaluations robust when data are short.
+## Architecture & Helpers
+- `activate_project()` (in `R/setup.R`) resets `setwd()` from `commandArgs()` and sources `renv/activate.R`; call it before touching the filesystem or packages.
+- `load_required_packages()` fails fast when dependencies are missing—run `renv::restore()` or `renv::install(<pkg>)` instead of installing on the fly.
+- `stationarise_quarterly()` stores trend/seasonal adjustments in `transforms`; always back-transform predictions with `restore_series_values()` (e.g., before writing targets or plotting).
+- `build_Y()` produces the `list(kofbarometer = ts, quarterly = ts matrix)` that `mfbvar::set_prior()` expects; preserve column order when adding targets.
+- `estimate_mfvar_model()` locks in Minnesota/IW priors and reads tuning from `options(mfvar.n_reps|mfvar.n_burnin|mfvar.n_thin)`; adjust them in tandem with `n_lags` or forecast horizon to keep burn-in consistent.
+- Benchmark helpers `predict_ar2()` (YW → OLS → ARIMA fallback) and `predict_rw_trend()` provide comparisons across holdout/CV—retain their multi-method safeguards for short samples.
 
-## Evaluation & Outputs
-- Holdout evaluations reserve up to four quarters (`run_holdout_evaluation()`); changing `n_lags` shrinks this window, so review the resulting `eval_horizon` before trusting comparisons.
-- Rolling cross-validation walks the ragged edge (`run_cross_validation()`); cap folds via `options(mfvar.cv_max_folds = <n>)` instead of editing the loop.
-- Forecast tables are saved as `mfvar_forecasts_full.csv` and `mfvar_forecasts_targets.csv`; the latter must include both step 1 and step 4 horizons for every target variable or a warning is raised.
-- Plots in `R/plotting.R` expect tidy inputs with `lower/median/upper` columns and use logged exchange-rate histories; only convert to levels for presentation inside `Draft_MFVAR.r`.
+## Pipeline & Evaluation
+- Run `Rscript Draft_MFVAR.r` from within `submission/`; the script enforces relative paths and writes forecasts, evaluations, plots, and `mfvar_model_ss.rds`.
+- Holdout horizon is `min(4, nrow(qdat) - (n_lags + 1))`; increasing `n_lags` shrinks evaluation data, so review `holdout_results$horizon` before trusting metrics.
+- Rolling CV (`run_cross_validation()`) walks the ragged edge; limit folds via `options(mfvar.cv_max_folds = <n>)` rather than editing the loop.
+- `mfvar_forecasts_targets.csv` must contain both step 1 and step 4 horizons for every `target_variables` entry; the script warns if any combination is missing.
+- `output/mfvar_summary.txt` captures `summary(mod_ss)` plus evaluation tables—check it first when diagnosing runs.
 
-## Development Workflow
-- Run `renv::restore()` from `submission/` (or rely on `.Rprofile`) before executing scripts; add packages with `renv::install()` so `renv.lock` stays authoritative.
-- Execute the main pipeline with `Rscript Draft_MFVAR.r` from `submission/`; the script resets `setwd()` so relative paths remain valid.
-- Docker users can reproduce the run with `docker compose run --rm momf`, which mounts `submission/data/` and captures outputs in the named volume.
-- When introducing new forecast targets, update `target_variables` in `R/setup.R`, ensure the quarterly CSV exposes the same columns, and confirm evaluation/plotting helpers handle them without manual branching.
-- Keep error handling in place: the pipeline stops early if data or barometer pulls fail, which is preferable to propagating NAs into the Bayesian model.
+## Benchmark Workflow
+- `run_benchmark_models.R` adds MIDAS regressions (`midasr`, `forecast`, `purrr`) and stage logging via `stage_status()`; invoke with `Rscript run_benchmark_models.R` after restoring packages.
+- It computes monthly barometer differences (`baro_diff_series`) and simulates partial-month availability via `extra_months` (0–3); reproducing results requires consistent monthly coverage settings.
+- `run_benchmark_cross_validation()` starts folds at `2015 Q4` by default and writes per-fold predictions to `model_benchmark_cv_predictions.csv`; adjust `initial_train_quarter` instead of rewriting loops when changing windows.
+- Benchmark summaries land in `model_benchmark_summary.md` and plots `model_benchmark_plot_<var>.png`; they rely on `convert_for_plot()` to re-level exchange-rate predictions.
+- Update `target_variables` in `R/setup.R`, ensure quarterly data exposes matching columns, and extend `y_ts_list`/plot labelling when introducing new targets.
+
+## Development Notes
+- `main.R` is a Docker/CI smoke test—avoid business logic there; keep primary workflows in `Draft_MFVAR.r` and `run_benchmark_models.R`.
+- Scripts follow tidyverse pipelines; suppress NSE notes with `utils::globalVariables()` rather than silencing warnings elsewhere.
+- Preserve the final `message()` structure in `Draft_MFVAR.r`; downstream automation watches it to detect success and enumerate artefacts.
+- Default to ASCII when editing data/scripts and prefer descriptive comments only for non-obvious logic.
