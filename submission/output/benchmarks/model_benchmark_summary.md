@@ -25,28 +25,20 @@
 ## Expanding Window Cross-Validation RMSE and MAE by Monthly Coverage
 | Monthly data | Model | Horizon | Observations | RMSE | MAE |
 | --- | --- | --- | --- | --- | --- |
-| Cutoff only | AR(2) | 1-step ahead | 6 | 0.4464 | 0.3277 |
-| Cutoff only | AR(2) | 1-year ahead | 6 | 1.3203 | 0.8536 |
-| Cutoff only | MF-VAR | 1-step ahead | 6 | 0.8118 | 0.5710 |
-| Cutoff only | MF-VAR | 1-year ahead | 6 | 1.3202 | 0.8396 |
-| Cutoff only | MIDAS | 1-step ahead | 6 | 0.4702 | 0.3047 |
-| Cutoff only | MIDAS | 1-year ahead | 6 | 1.1829 | 0.8119 |
-| Cutoff only | MIDAS (trend) | 1-step ahead | 6 | 0.3947 | 0.2161 |
-| Cutoff only | MIDAS (trend) | 1-year ahead | 6 | 0.9725 | 0.6954 |
-| Cutoff +1m | AR(2) | 1-step ahead | 6 | 0.4464 | 0.3277 |
-| Cutoff +1m | AR(2) | 1-year ahead | 6 | 1.3203 | 0.8536 |
-| Cutoff +1m | MF-VAR | 1-step ahead | 6 | 0.8118 | 0.5710 |
-| Cutoff +1m | MF-VAR | 1-year ahead | 6 | 1.3753 | 0.8912 |
-| Cutoff +1m | MIDAS | 1-step ahead | 6 | 0.6220 | 0.4548 |
-| Cutoff +1m | MIDAS | 1-year ahead | 6 | 1.1813 | 0.8132 |
-| Cutoff +1m | MIDAS (trend) | 1-step ahead | 6 | 0.7771 | 0.5517 |
-| Cutoff +1m | MIDAS (trend) | 1-year ahead | 6 | 0.9737 | 0.6966 |
-| Cutoff +2m | AR(2) | 1-step ahead | 6 | 0.4464 | 0.3277 |
-| Cutoff +2m | AR(2) | 1-year ahead | 6 | 1.3203 | 0.8536 |
-| Cutoff +2m | MF-VAR | 1-step ahead | 6 | 0.8118 | 0.5710 |
-| Cutoff +2m | MF-VAR | 1-year ahead | 6 | 1.3323 | 0.8961 |
-| Cutoff +2m | MIDAS | 1-step ahead | 6 | 0.6050 | 0.4294 |
-| Cutoff +2m | MIDAS | 1-year ahead | 6 | 1.1838 | 0.8196 |
-| Cutoff +2m | MIDAS (trend) | 1-step ahead | 6 | 0.7418 | 0.5322 |
-| Cutoff +2m | MIDAS (trend) | 1-year ahead | 6 | 0.9754 | 0.7021 |
+| Cutoff only | AR(2) | 1-step ahead | 12 | 0.8686 | 0.5055 |
+| Cutoff only | AR(2) | 1-year ahead | 12 | 0.9912 | 0.5947 |
+| Cutoff only | MF-VAR | 1-step ahead | 12 | 1.2883 | 0.7922 |
+| Cutoff only | MF-VAR | 1-year ahead | 12 | 1.0030 | 0.5943 |
+| Cutoff only | MIDAS | 1-step ahead | 12 | 0.4757 | 0.3102 |
+| Cutoff only | MIDAS | 1-year ahead | 12 | 1.0747 | 0.7444 |
+| Cutoff only | MIDAS (trend) | 1-step ahead | 12 | 0.5386 | 0.3002 |
+| Cutoff only | MIDAS (trend) | 1-year ahead | 12 | 0.8576 | 0.6258 |
+| Cutoff +1m | AR(2) | 1-step ahead | 12 | 0.8686 | 0.5055 |
+| Cutoff +1m | AR(2) | 1-year ahead | 12 | 0.9912 | 0.5947 |
+| Cutoff +1m | MF-VAR | 1-step ahead | 12 | 1.2883 | 0.7922 |
+| Cutoff +1m | MF-VAR | 1-year ahead | 12 | 1.0555 | 0.6458 |
+| Cutoff +1m | MIDAS | 1-step ahead | 12 | 1.6518 | 0.8509 |
+| Cutoff +1m | MIDAS | 1-year ahead | 12 | 1.0651 | 0.7380 |
+| Cutoff +1m | MIDAS (trend) | 1-step ahead | 12 | 1.7801 | 0.9346 |
+| Cutoff +1m | MIDAS (trend) | 1-year ahead | 12 | 0.8501 | 0.6198 |
 
