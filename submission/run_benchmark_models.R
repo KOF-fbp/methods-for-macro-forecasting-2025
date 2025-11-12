@@ -44,7 +44,7 @@ stage_status <- local({
 stage_status("Project setup", "start")
 activate_project()
 
-all_pkgs <- unique(c(required_pkgs, "midasr", "forecast", "purrr"))
+all_pkgs <- unique(c(required_pkgs, "midasr", "forecast", "purrr", "future", "future.apply"))
 load_required_packages(all_pkgs)
 stage_status(status = "done")
 
@@ -221,7 +221,8 @@ run_benchmark_cross_validation <- function(
     target_vars,
     forecast_steps,
     n_lags,
-    extra_months_options = 0:3,
+    extra_months_options = 0:2,
+    max_folds = Inf,
     initial_train_quarter = zoo::as.yearqtr("2015 Q4"),
     progress = TRUE) {
 
@@ -254,17 +255,43 @@ run_benchmark_cross_validation <- function(
   }
 
   cv_indices <- seq.int(cv_start_idx, cv_end_idx)
+  if (is.finite(max_folds)) {
+    max_folds <- as.integer(max_folds)
+    if (max_folds > 0L && length(cv_indices) > max_folds) {
+      cv_indices <- tail(cv_indices, max_folds)
+    }
+  }
   total_folds <- length(cv_indices)
+  if (total_folds == 0L) {
+    warning("Cross-validation skipped: no folds selected after applying limits.")
+    return(list(
+      results = tibble::tibble(),
+      metrics_by_horizon = tibble::tibble(),
+      metrics_overall = tibble::tibble(),
+      folds = tibble::tibble(),
+      fold_count = 0L,
+      extra_values = extra_months_options
+    ))
+  }
 
-  prediction_records <- vector("list", total_folds * max(1L, length(extra_months_options)))
-  actual_records <- vector("list", total_folds)
-  pred_counter <- 0L
+  show_fold_progress <- isTRUE(progress)
+  cores_available <- parallel::detectCores(logical = TRUE)
+  default_workers <- if (is.null(cores_available) || !is.finite(cores_available)) 1L else max(1L, cores_available - 1L)
+  desired_workers <- getOption("mfvar.cv_workers", default_workers)
+  if (!is.numeric(desired_workers) || !is.finite(desired_workers)) desired_workers <- default_workers
+  desired_workers <- as.integer(desired_workers)
+  desired_workers <- max(1L, min(desired_workers, total_folds))
+  use_parallel <- total_folds > 1L && desired_workers > 1L
 
-  for (fold_pos in seq_along(cv_indices)) {
+  if (use_parallel && show_fold_progress) {
+    message(sprintf("  • Running %d CV folds using %d worker(s)...", total_folds, desired_workers))
+  }
+
+  run_single_fold <- function(fold_pos) {
     idx <- cv_indices[fold_pos]
     train_rows <- idx - 1L
     if (train_rows <= n_lags) {
-      next
+      return(NULL)
     }
 
     q_train_adj <- dplyr::slice_head(qdat_adj, n = train_rows)
@@ -276,7 +303,7 @@ run_benchmark_cross_validation <- function(
     forecast_quarters <- q_eval_orig$qtr
     quarter_end_dates <- zoo::as.Date(forecast_quarters, frac = 1)
 
-    if (isTRUE(progress)) {
+    if (show_fold_progress && !use_parallel) {
       message(sprintf("  • CV fold %02d/%02d | training through %s", fold_pos, total_folds, cutoff_label))
     }
 
@@ -295,8 +322,6 @@ run_benchmark_cross_validation <- function(
         cutoff_quarter = cutoff_label,
         forecast_quarter = as.character(forecast_quarters[step_ahead])
       )
-
-    actual_records[[fold_pos]] <- actual_fold
 
     time_indices <- compute_time_index(train_rows, horizon_steps)
 
@@ -331,8 +356,7 @@ run_benchmark_cross_validation <- function(
 
     if (length(x_train_full) != train_rows * months_per_quarter) {
       warning(sprintf("Skipping fold %s: monthly regressor length mismatch.", cutoff_label), call. = FALSE)
-      actual_records[[fold_pos]] <- NULL
-      next
+      return(NULL)
     }
 
     future_start <- add_months(train_last_month, 1L)
@@ -344,7 +368,10 @@ run_benchmark_cross_validation <- function(
       as.numeric(x_future_actual)
     }
 
-    for (extra_months in extra_months_options) {
+    fold_predictions <- vector("list", length(extra_months_options))
+
+    for (extra_idx in seq_along(extra_months_options)) {
+      extra_months <- extra_months_options[extra_idx]
       baro_end <- add_months(train_last_month, extra_months)
       baro_train <- stats::window(baro_ts, end = baro_end)
 
@@ -365,7 +392,7 @@ run_benchmark_cross_validation <- function(
         ) |>
         dplyr::mutate(model = "MF-VAR")
 
-  fill_value <- if (length(x_train_full)) utils::tail(x_train_full, 1) else 0
+      fill_value <- if (length(x_train_full)) utils::tail(x_train_full, 1) else 0
       x_future_vec <- rep(fill_value, horizon_months)
       observed_months <- min(extra_months, length(x_future_actual_vec))
       if (observed_months > 0) {
@@ -397,7 +424,7 @@ run_benchmark_cross_validation <- function(
         tibble::tibble(variable = var, step_ahead = horizon_steps, prediction = preds, model = "MIDAS")
       })
 
-      scenario_predictions <- dplyr::bind_rows(
+      fold_predictions[[extra_idx]] <- dplyr::bind_rows(
         mfvar_pred,
         midas_trend_pred,
         midas_simple_pred,
@@ -412,14 +439,37 @@ run_benchmark_cross_validation <- function(
           quarter_end = quarter_end_dates[step_ahead],
           horizon = label_horizon(step_ahead)
         )
-
-      pred_counter <- pred_counter + 1L
-      prediction_records[[pred_counter]] <- scenario_predictions
     }
+
+    combined_predictions <- dplyr::bind_rows(fold_predictions)
+    if (!nrow(combined_predictions)) {
+      return(NULL)
+    }
+
+    list(
+      predictions = combined_predictions,
+      actual = actual_fold
+    )
   }
 
-  predictions_tbl <- dplyr::bind_rows(Filter(Negate(is.null), prediction_records))
-  actual_tbl <- dplyr::bind_rows(Filter(Negate(is.null), actual_records))
+  if (use_parallel) {
+    oplan <- future::plan()
+    on.exit(future::plan(oplan), add = TRUE)
+    future::plan(future::multisession, workers = desired_workers)
+    fold_results <- future.apply::future_lapply(seq_along(cv_indices), run_single_fold, future.seed = TRUE)
+  } else {
+    fold_results <- lapply(seq_along(cv_indices), run_single_fold)
+  }
+
+  fold_results <- purrr::compact(fold_results)
+
+  if (length(fold_results)) {
+    predictions_tbl <- dplyr::bind_rows(lapply(fold_results, `[[`, "predictions"))
+    actual_tbl <- dplyr::bind_rows(lapply(fold_results, `[[`, "actual"))
+  } else {
+    predictions_tbl <- tibble::tibble()
+    actual_tbl <- tibble::tibble()
+  }
 
   if (!nrow(predictions_tbl) || !nrow(actual_tbl)) {
     warning("Cross-validation produced no predictions after filtering.")
@@ -650,7 +700,8 @@ stage_status(status = "done")
 stage_status("Cross-validation evaluation", "start")
 
 cv_initial_quarter <- zoo::as.yearqtr("2015 Q4")
-cv_extra_months <- 0:3
+cv_extra_months <- 0:2
+cv_max_folds <- 28L
 cv_output <- run_benchmark_cross_validation(
   qdat_adj = qdat_adj,
   qdat_orig = qdat_orig,
@@ -662,6 +713,7 @@ cv_output <- run_benchmark_cross_validation(
   forecast_steps = forecast_steps,
   n_lags = n_lags,
   extra_months_options = cv_extra_months,
+  max_folds = cv_max_folds,
   initial_train_quarter = cv_initial_quarter,
   progress = TRUE
 )
