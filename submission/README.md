@@ -1,7 +1,8 @@
 # Swiss Macroeconomic Forecasting: MF-VAR vs MIDAS
 
-**Course Project**: Methods for Macro Forecasting  
-**Institution**: [Your Institution]  
+**Course Project**: Methods for Macroeconomic Forecasting  
+**Institution**: ETH Zurich 
+**Authors**: See `AUTHORS.yml`    
 **Date**: November 2025
 
 ## Overview

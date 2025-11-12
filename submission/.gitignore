@@ -1,3 +1,6 @@
+# Override parent .gitignore - we want to track docs/ in submission
+!docs/
+
 # R and RStudio
 .Rhistory
 .RData
@@ -30,10 +33,10 @@ Thumbs.db
 *_cache/
 /.quarto/
 
-# Keep documentation in docs/
-!docs/*.html
-!docs/*.pdf
-!docs/**/*_files/
+# Keep documentation source files in docs/, but not output folders
+!docs/**/*.qmd
+!docs/**/*.ipynb
+!docs/**/*.md
 
 # Python (if any)
 __pycache__/

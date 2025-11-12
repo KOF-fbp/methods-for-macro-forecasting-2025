@@ -1,8 +1,14 @@
 authors:
+  - name: "Minna Heim"
+    email: ""
+    eth_username: ""
+  - name: "Samuel Bartlett"
+    email: ""
+    eth_username: ""
   - name: "Michal Dudko"
     email: "mdudko@ethz.ch"
     eth_username: "mdudko"
 
-
+    
 requirements:
   min_commits_per_author: 2
