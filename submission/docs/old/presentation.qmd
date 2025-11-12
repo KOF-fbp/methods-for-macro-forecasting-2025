@@ -9,15 +9,40 @@ format:
 
 
 ```{r setup, include=FALSE}
-# Make the image available inside the preview root (submission/src)
-src_path <- file.path("..", "output", "midas_forecast_plot.png")
-dst_path <- file.path(".", "midas_forecast_plot.png")
-if (file.exists(src_path)) try(suppressWarnings(file.copy(src_path, dst_path, overwrite = TRUE)), silent = TRUE)
+# Copy relevant artifacts from submission/output/ so the slides render self-contained
+copy_safe <- function(rel_src, rel_dst = basename(rel_src)) {
+  src <- file.path("..", "output", rel_src)
+  dst <- file.path(".", rel_dst)
+  if (file.exists(src)) try(suppressWarnings(file.copy(src, dst, overwrite = TRUE)), silent = TRUE)
+}
 
-# Also copy the evaluation CSV produced by midas.qmd
-csv_src <- file.path("..", "output", "mse_results.csv")
-csv_dst <- file.path(".", "mse_results.csv")
-if (file.exists(csv_src)) try(suppressWarnings(file.copy(csv_src, csv_dst, overwrite = TRUE)), silent = TRUE)
+# Plots: MF-VAR forecasts and benchmarks
+lapply(c(
+  "midas_forecast_plot.png",
+  "model_benchmark_plot.png",
+  "model_benchmark_plot_inflation.png",
+  "model_benchmark_plot_gdp_growth.png",
+  "model_benchmark_plot_exch_rate.png",
+  "forecast_gdp_growth.png",
+  "forecast_gdp_growth_context.png",
+  "forecast_inflation.png",
+  "forecast_inflation_context.png",
+  "forecast_exchange_rate.png",
+  "forecast_exchange_rate_context.png"
+), copy_safe)
+
+# Tables and summaries
+lapply(c(
+  "mse_results.csv",
+  "model_benchmark_metrics.csv",
+  "model_benchmark_holdout_detailed.csv",
+  "mfvar_forecasts_targets.csv",
+  "mfvar_forecasts_full.csv",
+  "forecast_evaluation.csv",
+  "forecast_cross_validation.csv",
+  "mfvar_summary.txt",
+  "model_benchmark_summary.md"
+), copy_safe)
 ```
 
 

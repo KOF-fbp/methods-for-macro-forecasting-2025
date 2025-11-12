@@ -1,0 +1,15 @@
+{
+  "r.rterm.mac": "/usr/local/bin/R",
+  "r.rpath.mac": "/usr/local/bin/R",
+  "r.lsp.diagnostics": false,
+
+  "terminal.integrated.env.osx": {
+    "PATH": "/usr/local/bin:/opt/homebrew/bin:${env:PATH}"
+  },
+  "terminal.integrated.inheritEnv": true,
+
+  "python-envs.defaultEnvManager": "ms-python.python:conda",
+  "python-envs.defaultPackageManager": "ms-python.python:conda",
+  "python-envs.pythonProjects": []
+
+}

@@ -1,0 +1,101 @@
+# Override parent .gitignore - we want to track docs/ in submission
+!docs/
+
+# R and RStudio
+.Rhistory
+.RData
+.Rproj.user
+.Rproj
+*.Rproj
+.Ruserdata
+Rplots.pdf
+
+# Output files (included in repo for reproducibility)
+# Users can see results without running time-consuming models
+# Uncomment lines below to exclude outputs from version control:
+# output/*.csv
+# output/*.txt
+# output/*.png
+# output/*.rds
+# output/*.pdf
+
+# Temporary files
+*.tmp
+*.bak
+*~
+.DS_Store
+Thumbs.db
+
+# RMarkdown/Quarto
+*.html
+*.pdf
+*_files/
+*_cache/
+/.quarto/
+
+# Keep documentation source files in docs/, but not output folders
+!docs/**/*.qmd
+!docs/**/*.ipynb
+!docs/**/*.md
+
+# Python (if any)
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb~
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+.github/
+.cursorrules
+.windsurfrules
+.clinerules
+
+# Temporary debug/test files (not for submission)
+tmp_*.R
+tmp_*.py
+tmp_*.rds
+test_*.ipynb
+
+# Log files
+*.log
+
+# Data (optional - uncomment if you don't want to track large data files)
+# data/raw_data/*.csv
+# data/processed/*.csv
+
+# renv library (managed by renv.lock)
+renv/library/
+renv/local/
+renv/staging/
+
+# Keep renv infrastructure
+!renv/activate.R
+!renv/settings.json
+!renv.lock
+
+# Docker
+.dockerignore
+
+# OS-specific
+*.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Archives
+*.zip
+*.tar.gz
+*.rar

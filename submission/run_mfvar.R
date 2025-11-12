@@ -18,7 +18,7 @@ variable <- step_ahead <- horizon <- lower <- median <- upper <- NULL
 
 # --- I/O paths ---------------------------------------------------------------
 DATA_DIR <- file.path(".", "data")
-OUT_DIR  <- file.path(".", "output")
+OUT_DIR  <- file.path(".", "output", "forecasts")
 if (!dir.exists(OUT_DIR)) dir.create(OUT_DIR, recursive = TRUE)
 
 # --- Data preparation -------------------------------------------------------
@@ -38,7 +38,7 @@ n_lags <- 5
 
 # --- Evaluation suites ------------------------------------------------------
 # Benchmark MF-VAR forecasts against AR(2) both on a holdout window and
-# in rolling one-step-ahead cross-validation.
+# in expanding window one-step-ahead cross-validation.
 holdout_results <- run_holdout_evaluation(qdat_adj, qdat_orig, baro_ts, n_lags, target_vars, transforms, OUT_DIR)
 cv_results <- run_cross_validation(qdat_adj, qdat_orig, baro_ts, n_lags, target_vars, transforms, OUT_DIR)
 
@@ -118,7 +118,7 @@ if (!is.null(holdout_results$table)) {
   cat("\nSkipped (insufficient holdout sample after reserving lags).\n")
 }
 
-cat("\n==== Rolling 1-step cross-validation ====\n")
+cat("\n==== Expanding window 1-step cross-validation ====\n")
 if (!is.null(cv_results$table)) {
   cat(sprintf("\nFolds: %d (last %d quarter(s)).\n\n", cv_results$folds, cv_results$horizon))
   print(cv_results$table, n = nrow(cv_results$table))
@@ -250,49 +250,49 @@ saveRDS(mod_ss, file.path(OUT_DIR, "mfvar_model_ss.rds"))
 # --- Completion message -----------------------------------------------------
 message_lines <- c(
   "Done. Wrote:\n",
-  "  - output/mfvar_summary.txt\n",
-  "  - output/mfvar_forecasts_full.csv\n",
-  "  - output/mfvar_forecasts_targets.csv\n"
+  "  - output/forecasts/mfvar_summary.txt\n",
+  "  - output/forecasts/mfvar_forecasts_full.csv\n",
+  "  - output/forecasts/mfvar_forecasts_targets.csv\n"
 )
 
 if (!is.null(holdout_results$path)) {
-  message_lines <- c(message_lines, "  - output/forecast_evaluation.csv\n")
+  message_lines <- c(message_lines, "  - output/forecasts/forecast_evaluation.csv\n")
 } else {
   message_lines <- c(message_lines, "  - forecast evaluation skipped (not enough holdout data)\n")
 }
 
 if (!is.null(cv_results$path)) {
-  message_lines <- c(message_lines, "  - output/forecast_cross_validation.csv\n")
+  message_lines <- c(message_lines, "  - output/forecasts/forecast_cross_validation.csv\n")
 } else {
   message_lines <- c(message_lines, "  - cross-validation skipped or unavailable\n")
 }
 
 if (!is.null(cv_results$folds_path)) {
-  message_lines <- c(message_lines, "  - output/forecast_cross_validation_folds.csv\n")
+  message_lines <- c(message_lines, "  - output/forecasts/forecast_cross_validation_folds.csv\n")
 }
 
 if (!is.null(gdp_plot_path)) {
-  message_lines <- c(message_lines, "  - output/forecast_gdp_growth.png\n")
+  message_lines <- c(message_lines, "  - output/forecasts/forecast_gdp_growth.png\n")
 }
 if (!is.null(gdp_context_path)) {
-  message_lines <- c(message_lines, "  - output/forecast_gdp_growth_context.png\n")
+  message_lines <- c(message_lines, "  - output/forecasts/forecast_gdp_growth_context.png\n")
 }
 if (!is.null(inflation_plot_path)) {
-  message_lines <- c(message_lines, "  - output/forecast_inflation.png\n")
+  message_lines <- c(message_lines, "  - output/forecasts/forecast_inflation.png\n")
 }
 if (!is.null(inflation_context_path)) {
-  message_lines <- c(message_lines, "  - output/forecast_inflation_context.png\n")
+  message_lines <- c(message_lines, "  - output/forecasts/forecast_inflation_context.png\n")
 }
 if (!is.null(exch_plot_path)) {
-  message_lines <- c(message_lines, "  - output/forecast_exchange_rate.png\n")
+  message_lines <- c(message_lines, "  - output/forecasts/forecast_exchange_rate.png\n")
 }
 if (!is.null(exch_context_path)) {
-  message_lines <- c(message_lines, "  - output/forecast_exchange_rate_context.png\n")
+  message_lines <- c(message_lines, "  - output/forecasts/forecast_exchange_rate_context.png\n")
 }
 
 message_lines <- c(
   message_lines,
-  "  - output/mfvar_model_ss.rds"
+  "  - output/forecasts/mfvar_model_ss.rds"
 )
 
 message(paste0(message_lines, collapse = ""))
