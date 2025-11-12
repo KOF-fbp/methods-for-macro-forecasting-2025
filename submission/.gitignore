@@ -5,6 +5,7 @@
 .Rproj
 *.Rproj
 .Ruserdata
+Rplots.pdf
 
 # Output files (included in repo for reproducibility)
 # Users can see results without running time-consuming models
