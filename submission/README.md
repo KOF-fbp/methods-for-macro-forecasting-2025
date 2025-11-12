@@ -1,6 +1,21 @@
-# Swiss Macro Forecasting with Mixed-Frequency VAR
+# Swiss Macroeconomic Forecasting: MF-VAR vs MIDAS
 
-A Bayesian mixed-frequency VAR (MF-VAR) pipeline for forecasting Swiss macroeconomic indicators using quarterly data augmented with the monthly KOF Economic Barometer.
+**Course Project**: Methods for Macro Forecasting  
+**Institution**: [Your Institution]  
+**Date**: November 2025
+
+## Overview
+
+This project implements and compares two approaches for forecasting Swiss macroeconomic indicators using mixed-frequency data:
+
+1. **Mixed-Frequency Bayesian VAR (MF-VAR)** - Incorporates monthly KOF Barometer data with quarterly GDP, inflation, and exchange rate series
+2. **MIDAS Regression** - Uses polynomial distributed lag structures to mix data frequencies
+
+The analysis includes rigorous evaluation through holdout testing and rolling cross-validation, with comprehensive benchmark comparisons against AR(2) and random walk models.
+
+## Authors
+
+See [`AUTHORS.yml`](AUTHORS.yml) for contributor information.
 
 ## Project Structure
 
@@ -219,39 +234,31 @@ Edit main scripts to adjust:
 ## Dependencies
 
 Core packages:
-- `mfbvar` - Mixed-frequency Bayesian VAR
+- `mfbvar` - Mixed-frequency Bayesian VAR ([Ankargren et al.](https://github.com/ankargren/mfbvar))
 - `kofdata` - KOF data API client
 - `tidyverse` - Data manipulation and visualization
 - `zoo` - Time series utilities
-
-Benchmark models:
 - `midasr` - MIDAS regression
 - `forecast` - Time series forecasting
 
 See `renv.lock` for complete dependency list with versions.
 
-## Docker Support
+## Reproducibility
 
-The repository includes Docker configuration for reproducible execution:
+This project uses `renv` for package management to ensure reproducibility across different systems. All dependencies are locked to specific versions.
 
-```bash
-docker build -t mfvar-pipeline .
-docker run -v $(pwd)/output:/app/output mfvar-pipeline
-```
+## Results
 
-## CI/CD
-
-GitHub Actions workflow validates the environment via `main.R` smoke test.
+Pre-computed results are included in `output/forecasts/` and `output/benchmarks/` directories, allowing inspection without re-running the models (which can take 5-10 minutes).
 
 ## Troubleshooting
 
 ### KOF Barometer fetch fails
 - Check internet connection
-- Try alternative series name in `fetch_kof_barometer()`
-- Provide cached `ts` object for offline work
+- The `kofdata` package requires API access to KOF Swiss Economic Institute
 
 ### Insufficient data for evaluation
-- Reduce `n_lags` in main scripts
+- Reduce `n_lags` in workflow scripts
 - Shorten evaluation horizon
 - Extend historical data sample
 
@@ -269,18 +276,18 @@ renv::status()         # Check consistency
 
 ## References
 
-- Schorfheide, F., & Song, D. (2015). "Real-time forecasting with a mixed-frequency VAR." *Journal of Business & Economic Statistics*
+### Methodology
+- Schorfheide, F., & Song, D. (2015). "Real-time forecasting with a mixed-frequency VAR." *Journal of Business & Economic Statistics*, 33(3), 403-418.
+- Ghysels, E., Sinko, A., & Valkanov, R. (2007). "MIDAS regressions: Further results and new directions." *Econometric Reviews*, 26(1), 53-90.
+
+### Data Sources
 - KOF Swiss Economic Institute: https://kof.ethz.ch/
+- Swiss National Bank (SNB) economic data
+
+### Software
 - `mfbvar` package: https://github.com/ankargren/mfbvar
+- `midasr` package: https://CRAN.R-project.org/package=midasr
 
 ## License
 
-See repository root for license information.
-
-## Authors
-
-See `AUTHORS.yml` for contributor information.
-
-## Contact
-
-For questions or issues, please open a GitHub issue or contact the maintainers.
+This project is submitted as coursework for educational purposes. See `AUTHORS.yml` for contributor information.
