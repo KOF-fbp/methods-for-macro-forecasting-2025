@@ -99,33 +99,31 @@ for (var in target_vars) {
   trend_train <- seq_len(length(y_train))
   trend_test <- (length(y_train) + 1):(length(y_train) + length(y_test))
   
-  # MIDAS with trend
+  # MIDAS with trend - use data parameter pattern
   fit_trend <- tryCatch({
-    midasr::midas_r(
-      y_train ~ trend_train + midasr::mls(y_train, k = 1:2, m = 1) + midasr::fmls(x_train, k = 2, m = 3),
-      start = list(x_train = rep(0, 3))
-    )
+    data_list <- list(y = y_train, x = x_train, trend = trend_train)
+    formula_obj <- stats::as.formula("y ~ trend + mls(y, k = 1, m = 1) + fmls(x, k = 2, m = 3)")
+    midasr::midas_r(formula_obj, data = data_list, start = list(x = rep(0, 3)))
   }, error = function(e) {
     warning(sprintf("MIDAS (trend) failed for %s: %s", var, conditionMessage(e)))
     NULL
   })
   
-  # MIDAS without trend
+  # MIDAS without trend - use data parameter pattern
   fit_simple <- tryCatch({
-    midasr::midas_r(
-      y_train ~ midasr::mls(y_train, k = 1:2, m = 1) + midasr::fmls(x_train, k = 2, m = 3),
-      start = list(x_train = rep(0, 3))
-    )
+    data_list <- list(y = y_train, x = x_train)
+    formula_obj <- stats::as.formula("y ~ mls(y, k = 1, m = 1) + fmls(x, k = 2, m = 3)")
+    midasr::midas_r(formula_obj, data = data_list, start = list(x = rep(0, 3)))
   }, error = function(e) {
     warning(sprintf("MIDAS (simple) failed for %s: %s", var, conditionMessage(e)))
     NULL
   })
   
-  # Generate forecasts
+  # Generate forecasts - match variable names in newdata
   fc_trend <- if (!is.null(fit_trend)) {
     tryCatch({
       midasr::forecast(fit_trend, 
-                      newdata = list(x_train = x_test, trend_train = trend_test),
+                      newdata = list(x = x_test, trend = trend_test),
                       h = length(y_test),
                       method = "dynamic")$mean
     }, error = function(e) {
@@ -139,7 +137,7 @@ for (var in target_vars) {
   fc_simple <- if (!is.null(fit_simple)) {
     tryCatch({
       midasr::forecast(fit_simple,
-                      newdata = list(x_train = x_test),
+                      newdata = list(x = x_test),
                       h = length(y_test),
                       method = "dynamic")$mean
     }, error = function(e) {

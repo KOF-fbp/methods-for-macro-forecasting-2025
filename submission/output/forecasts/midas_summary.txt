@@ -13,136 +13,130 @@ Target variables: gdp_growth, inflation, exch_rate
 MIDAS with trend:
 
 MIDAS regression model with "ts" data:
-Start = 1992(4), End = 2024(3)
+Start = 1992(3), End = 2024(3)
 
- Formula y_train ~ trend_train + midasr::mls(y_train, k = 1:2, m = 1) +      midasr::fmls(x_train, k = 2, m = 3) 
+ Formula y ~ trend + mls(y, k = 1, m = 1) + fmls(x, k = 2, m = 3) 
 
  Parameters:
-              Estimate Std. Error t value Pr(>|t|)    
-(Intercept)   2.520577   0.781564   3.225 0.001620 ** 
-trend_train  -0.006065   0.007580  -0.800 0.425187    
-midasr::mls  -0.027168   0.118649  -0.229 0.819271    
-midasr::fmls  0.023549   0.061406   0.383 0.702024    
-x_train1     -0.329596   0.075115  -4.388 2.46e-05 ***
-x_train2      0.067886   0.086104   0.788 0.431994    
-x_train3      0.579692   0.163369   3.548 0.000553 ***
+             Estimate Std. Error t value Pr(>|t|)    
+(Intercept)  2.504225   0.766729   3.266 0.001413 ** 
+trend       -0.005410   0.007565  -0.715 0.475863    
+y           -0.026008   0.128796  -0.202 0.840305    
+x1          -0.333285   0.073878  -4.511 1.48e-05 ***
+x2           0.070132   0.085168   0.823 0.411842    
+x3           0.579507   0.169724   3.414 0.000866 ***
 ---
 Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
 
- Residual standard error: 3.26 on 121 degrees of freedom
+ Residual standard error: 3.239 on 123 degrees of freedom
 
 MIDAS without trend:
 
 MIDAS regression model with "ts" data:
-Start = 1992(4), End = 2024(3)
+Start = 1992(3), End = 2024(3)
 
- Formula y_train ~ midasr::mls(y_train, k = 1:2, m = 1) + midasr::fmls(x_train,      k = 2, m = 3) 
+ Formula y ~ mls(y, k = 1, m = 1) + fmls(x, k = 2, m = 3) 
 
  Parameters:
-             Estimate Std. Error t value Pr(>|t|)    
-(Intercept)   2.11270    0.43879   4.815 4.27e-06 ***
-midasr::mls  -0.02506    0.13121  -0.191  0.84887    
-midasr::fmls  0.02332    0.06060   0.385  0.70102    
-x_train1     -0.33300    0.06116  -5.444 2.74e-07 ***
-x_train2      0.07426    0.07444   0.998  0.32049    
-x_train3      0.57713    0.17324   3.331  0.00114 ** 
+            Estimate Std. Error t value Pr(>|t|)    
+(Intercept)  2.14364    0.40410   5.305 5.01e-07 ***
+y           -0.02485    0.13283  -0.187  0.85191    
+x1          -0.33628    0.05955  -5.647 1.06e-07 ***
+x2           0.07521    0.07256   1.037  0.30194    
+x3           0.57594    0.17439   3.303  0.00125 ** 
 ---
 Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
 
- Residual standard error: 3.255 on 122 degrees of freedom
+ Residual standard error: 3.233 on 124 degrees of freedom
 
 --- inflation ---
 
 MIDAS with trend:
 
 MIDAS regression model with "ts" data:
-Start = 1992(4), End = 2024(3)
+Start = 1992(3), End = 2024(3)
 
- Formula y_train ~ trend_train + midasr::mls(y_train, k = 1:2, m = 1) +      midasr::fmls(x_train, k = 2, m = 3) 
+ Formula y ~ trend + mls(y, k = 1, m = 1) + fmls(x, k = 2, m = 3) 
 
  Parameters:
-              Estimate Std. Error t value Pr(>|t|)    
-(Intercept)   0.381062   0.194768   1.956   0.0527 .  
-trend_train  -0.001741   0.002465  -0.706   0.4815    
-midasr::mls   0.533543   0.102999   5.180 8.97e-07 ***
-midasr::fmls  0.115026   0.109139   1.054   0.2940    
-x_train1     -0.017311   0.020121  -0.860   0.3913    
-x_train2      0.021207   0.031467   0.674   0.5016    
-x_train3      0.073066   0.033245   2.198   0.0299 *  
+             Estimate Std. Error t value Pr(>|t|)    
+(Intercept)  0.449244   0.198555   2.263   0.0254 *  
+trend       -0.002190   0.002464  -0.889   0.3758    
+y            0.600604   0.079118   7.591 6.83e-12 ***
+x1          -0.016448   0.020557  -0.800   0.4252    
+x2           0.023037   0.028647   0.804   0.4228    
+x3           0.073867   0.032575   2.268   0.0251 *  
 ---
 Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
 
- Residual standard error: 1.082 on 121 degrees of freedom
+ Residual standard error: 1.081 on 123 degrees of freedom
 
 MIDAS without trend:
 
 MIDAS regression model with "ts" data:
-Start = 1992(4), End = 2024(3)
+Start = 1992(3), End = 2024(3)
 
- Formula y_train ~ midasr::mls(y_train, k = 1:2, m = 1) + midasr::fmls(x_train,      k = 2, m = 3) 
+ Formula y ~ mls(y, k = 1, m = 1) + fmls(x, k = 2, m = 3) 
 
  Parameters:
-             Estimate Std. Error t value Pr(>|t|)    
-(Intercept)   0.25645    0.09795   2.618  0.00996 ** 
-midasr::mls   0.53817    0.10304   5.223 7.36e-07 ***
-midasr::fmls  0.12180    0.10693   1.139  0.25691    
-x_train1     -0.01806    0.01980  -0.912  0.36366    
-x_train2      0.02332    0.03170   0.736  0.46330    
-x_train3      0.07299    0.03315   2.202  0.02956 *  
+            Estimate Std. Error t value Pr(>|t|)    
+(Intercept)  0.29493    0.10484   2.813  0.00571 ** 
+y            0.61281    0.07841   7.815 2.02e-12 ***
+x1          -0.01726    0.02020  -0.854  0.39455    
+x2           0.02588    0.02873   0.901  0.36944    
+x3           0.07361    0.03269   2.252  0.02607 *  
 ---
 Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
 
- Residual standard error: 1.079 on 122 degrees of freedom
+ Residual standard error: 1.079 on 124 degrees of freedom
 
 --- exch_rate ---
 
 MIDAS with trend:
 
 MIDAS regression model with "ts" data:
-Start = 1992(4), End = 2024(3)
+Start = 1992(3), End = 2024(3)
 
- Formula y_train ~ trend_train + midasr::mls(y_train, k = 1:2, m = 1) +      midasr::fmls(x_train, k = 2, m = 3) 
+ Formula y ~ trend + mls(y, k = 1, m = 1) + fmls(x, k = 2, m = 3) 
 
  Parameters:
-               Estimate Std. Error t value Pr(>|t|)    
-(Intercept)   0.0198425  0.0169843   1.168 0.244988    
-trend_train  -0.0001852  0.0001307  -1.417 0.158955    
-midasr::mls   1.1384116  0.0983655  11.573  < 2e-16 ***
-midasr::fmls -0.1759807  0.0983024  -1.790 0.075923 .  
-x_train1      0.0003263  0.0004838   0.674 0.501289    
-x_train2      0.0020758  0.0007835   2.650 0.009136 ** 
-x_train3      0.0019103  0.0004916   3.886 0.000167 ***
+              Estimate Std. Error t value Pr(>|t|)    
+(Intercept)  0.0140659  0.0195392   0.720 0.472962    
+trend       -0.0001467  0.0001529  -0.959 0.339486    
+y            0.9697483  0.0325929  29.753  < 2e-16 ***
+x1           0.0002968  0.0004982   0.596 0.552470    
+x2           0.0020333  0.0007553   2.692 0.008092 ** 
+x3           0.0020950  0.0005297   3.955 0.000128 ***
 ---
 Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
 
- Residual standard error: 0.01963 on 121 degrees of freedom
+ Residual standard error: 0.01993 on 123 degrees of freedom
 
 MIDAS without trend:
 
 MIDAS regression model with "ts" data:
-Start = 1992(4), End = 2024(3)
+Start = 1992(3), End = 2024(3)
 
- Formula y_train ~ midasr::mls(y_train, k = 1:2, m = 1) + midasr::fmls(x_train,      k = 2, m = 3) 
+ Formula y ~ mls(y, k = 1, m = 1) + fmls(x, k = 2, m = 3) 
 
  Parameters:
-               Estimate Std. Error t value Pr(>|t|)    
-(Intercept)  -0.0030605  0.0032499  -0.942 0.348202    
-midasr::mls   1.1573745  0.0979331  11.818  < 2e-16 ***
-midasr::fmls -0.1604497  0.0997093  -1.609 0.110163    
-x_train1      0.0003328  0.0004763   0.699 0.486011    
-x_train2      0.0021812  0.0007973   2.736 0.007154 ** 
-x_train3      0.0019369  0.0005007   3.869 0.000177 ***
+              Estimate Std. Error t value Pr(>|t|)    
+(Intercept) -0.0039874  0.0035130  -1.135 0.258539    
+y            0.9969983  0.0096275 103.557  < 2e-16 ***
+x1           0.0003037  0.0004937   0.615 0.539555    
+x2           0.0021221  0.0007687   2.761 0.006646 ** 
+x3           0.0021058  0.0005294   3.978 0.000117 ***
 ---
 Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
 
- Residual standard error: 0.01973 on 122 degrees of freedom
+ Residual standard error: 0.01996 on 124 degrees of freedom
 
 ==== Forecast Evaluation ====
 
 # A tibble: 4 × 5
   model        horizon       rmse   mae n_obs
   <chr>        <chr>        <dbl> <dbl> <int>
-1 midas_simple 1-step ahead   NaN   NaN     0
-2 midas_simple 1-year ahead   NaN   NaN     0
-3 midas_trend  1-step ahead   NaN   NaN     0
-4 midas_trend  1-year ahead   NaN   NaN     0
+1 midas_simple 1-step ahead  1.01 0.593     3
+2 midas_simple 1-year ahead  2.87 1.71      3
+3 midas_trend  1-step ahead  1.21 0.735     3
+4 midas_trend  1-year ahead  2.69 1.60      3
