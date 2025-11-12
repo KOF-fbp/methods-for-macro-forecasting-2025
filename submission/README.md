@@ -17,13 +17,16 @@ A Bayesian mixed-frequency VAR (MF-VAR) pipeline for forecasting Swiss macroecon
 │   ├── metadata_quarterly*.csv # Data provenance and documentation
 │   └── *.csv                   # Raw source data from SNB
 │
-├── output/                     # Generated outputs (gitignored)
-│   ├── mfvar_forecasts_*.csv   # Model forecasts
-│   ├── mfvar_summary.txt       # Model diagnostics
-│   ├── mfvar_model_ss.rds      # Saved model object
-│   ├── forecast_*.csv          # Evaluation results
-│   ├── model_benchmark_*.csv   # Benchmark comparison metrics
-│   └── *.png                   # Forecast plots
+├── output/                     # Generated outputs (gitignored except results)
+│   ├── forecasts/             # Current forecasts from latest data
+│   │   ├── mfvar_*.csv        # MF-VAR forecasts
+│   │   ├── midas_*.csv        # MIDAS forecasts
+│   │   ├── *.png              # Forecast visualizations
+│   │   └── *.rds              # Saved model objects
+│   └── benchmarks/            # Model comparison & evaluation
+│       ├── model_benchmark_*.csv   # Comparison metrics
+│       ├── forecast_evaluation.csv # Holdout evaluation
+│       └── *.png              # Comparison plots
 │
 ├── docs/                       # Documentation and analysis
 │   ├── mfvar_walkthrough.*     # Tutorial notebook
@@ -73,10 +76,10 @@ This runs the complete MF-VAR workflow:
 5. Generates forecasts and plots
 
 **Outputs:**
-- `output/mfvar_forecasts_full.csv` - All forecast horizons
-- `output/mfvar_forecasts_targets.csv` - 1-step and 1-year ahead only
-- `output/mfvar_summary.txt` - Model diagnostics and evaluation
-- `output/forecast_*.png` - Forecast visualizations
+- `output/forecasts/mfvar_forecasts_full.csv` - All forecast horizons
+- `output/forecasts/mfvar_forecasts_targets.csv` - 1-step and 1-year ahead only
+- `output/forecasts/mfvar_summary.txt` - Model diagnostics and evaluation
+- `output/forecasts/forecast_*.png` - Forecast visualizations
 
 #### Option 2: MIDAS Pipeline
 
@@ -90,10 +93,10 @@ Runs MIDAS regression models with the KOF Barometer:
 3. Computes evaluation metrics
 
 **Outputs:**
-- `output/midas_forecasts_full.csv` - All forecast horizons
-- `output/midas_forecasts_targets.csv` - 1-step and 1-year ahead only
-- `output/midas_summary.txt` - Model diagnostics
-- `output/midas_evaluation.csv` - Error metrics
+- `output/forecasts/midas_forecasts_full.csv` - All forecast horizons
+- `output/forecasts/midas_forecasts_targets.csv` - 1-step and 1-year ahead only
+- `output/forecasts/midas_summary.txt` - Model diagnostics
+- `output/forecasts/midas_evaluation.csv` - Error metrics
 
 #### Option 3: Benchmark Comparison
 
@@ -107,9 +110,9 @@ Compares all models (MF-VAR, MIDAS, AR(2), RW-trend) with:
 - Multiple monthly data coverage scenarios
 
 **Outputs:**
-- `output/model_benchmark_*.csv` - Detailed metrics
-- `output/model_benchmark_summary.md` - Summary tables
-- `output/model_benchmark_plot_*.png` - Comparison plots
+- `output/benchmarks/model_benchmark_*.csv` - Detailed metrics
+- `output/benchmarks/model_benchmark_summary.md` - Summary tables
+- `output/benchmarks/model_benchmark_plot_*.png` - Comparison plots
 
 ## Target Variables
 

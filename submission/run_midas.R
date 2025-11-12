@@ -25,7 +25,7 @@ load_required_packages(required_midas)
 
 # --- Configuration -----------------------------------------------------------
 DATA_DIR <- file.path(".", "data")
-OUT_DIR  <- file.path(".", "output")
+OUT_DIR  <- file.path(".", "output", "forecasts")
 if (!dir.exists(OUT_DIR)) dir.create(OUT_DIR, recursive = TRUE)
 
 n_lags <- 5  # For consistency with MF-VAR
@@ -250,10 +250,10 @@ sink()
 # --- Completion Message ------------------------------------------------------
 message_lines <- c(
   "\nMIDAS pipeline complete. Wrote:\n",
-  "  - output/midas_forecasts_full.csv\n",
-  "  - output/midas_forecasts_targets.csv\n",
-  "  - output/midas_evaluation.csv\n",
-  "  - output/midas_summary.txt\n"
+  "  - output/forecasts/midas_forecasts_full.csv\n",
+  "  - output/forecasts/midas_forecasts_targets.csv\n",
+  "  - output/forecasts/midas_evaluation.csv\n",
+  "  - output/forecasts/midas_summary.txt\n"
 )
 
 message(paste0(message_lines, collapse = ""))

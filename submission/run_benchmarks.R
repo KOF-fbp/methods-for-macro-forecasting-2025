@@ -49,7 +49,7 @@ load_required_packages(all_pkgs)
 stage_status(status = "done")
 
 DATA_DIR <- file.path(".", "data")
-OUT_DIR <- file.path(".", "output")
+OUT_DIR <- file.path(".", "output", "benchmarks")
 if (!dir.exists(OUT_DIR)) dir.create(OUT_DIR, recursive = TRUE)
 
 forecast_steps <- c(1L, 4L)
@@ -882,12 +882,12 @@ readr::write_csv(cv_results_export, file.path(OUT_DIR, "model_benchmark_cv_predi
 
 cat(
   "Benchmark comparison complete.\n",
-  "  - output/model_benchmark_metrics.csv\n",
-  "  - output/model_benchmark_holdout_detailed.csv\n",
-  "  - output/model_benchmark_forecasts.csv\n",
-  "  - output/model_benchmark_cv_metrics.csv\n",
-  "  - output/model_benchmark_cv_predictions.csv\n",
-  "  - output/model_benchmark_summary.md\n",
+  "  - output/benchmarks/model_benchmark_metrics.csv\n",
+  "  - output/benchmarks/model_benchmark_holdout_detailed.csv\n",
+  "  - output/benchmarks/model_benchmark_forecasts.csv\n",
+  "  - output/benchmarks/model_benchmark_cv_metrics.csv\n",
+  "  - output/benchmarks/model_benchmark_cv_predictions.csv\n",
+  "  - output/benchmarks/model_benchmark_summary.md\n",
   paste0("  - ", plot_paths, collapse = "\n"),
   "\n",
   sep = ""
