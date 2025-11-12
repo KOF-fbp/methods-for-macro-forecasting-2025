@@ -8,7 +8,7 @@ utils::globalVariables(c(
 qtr <- rvgdp <- cpi <- wkfreuro <- gdp_growth <- inflation <- exch_rate <- time_index <- NULL
 
 read_quarterly_data <- function(data_dir) {
-  q_path <- file.path(data_dir, "data_quarterly.csv")
+  q_path <- file.path(data_dir, "processed", "data_quarterly.csv")
   stopifnot(file.exists(q_path))
   qraw <- readr::read_csv(q_path, show_col_types = FALSE)
 

@@ -1,0 +1,87 @@
+# R and RStudio
+.Rhistory
+.RData
+.Rproj.user
+.Rproj
+*.Rproj
+.Ruserdata
+
+# Output files (generated)
+output/*.csv
+output/*.txt
+output/*.png
+output/*.rds
+output/*.pdf
+
+# Keep the output directory structure
+!output/.gitkeep
+
+# Temporary files
+*.tmp
+*.bak
+*~
+.DS_Store
+Thumbs.db
+
+# RMarkdown/Quarto
+*.html
+*.pdf
+*_files/
+*_cache/
+/.quarto/
+
+# Keep documentation in docs/
+!docs/*.html
+!docs/*.pdf
+!docs/**/*_files/
+
+# Python (if any)
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb~
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Log files
+*.log
+
+# Data (optional - uncomment if you don't want to track large data files)
+# data/raw_data/*.csv
+# data/processed/*.csv
+
+# renv library (managed by renv.lock)
+renv/library/
+renv/local/
+renv/staging/
+
+# Keep renv infrastructure
+!renv/activate.R
+!renv/settings.json
+!renv.lock
+
+# Docker
+.dockerignore
+
+# OS-specific
+*.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Archives
+*.zip
+*.tar.gz
+*.rar
