@@ -1,0 +1,7 @@
+variable,horizon,quarter_end,midas_trend,midas_simple,actual
+gdp_growth,1-step ahead,2024-12-31,NA,NA,1.3156274812899937
+gdp_growth,1-year ahead,2025-09-30,NA,NA,-0.3289627178062915
+inflation,1-step ahead,2024-12-31,NA,NA,-0.025275077754116637
+inflation,1-year ahead,2025-09-30,NA,NA,0.6122884651894367
+exch_rate,1-step ahead,2024-12-31,NA,NA,-0.06616821551812571
+exch_rate,1-year ahead,2025-09-30,NA,NA,-0.06684019298606815

@@ -102,7 +102,7 @@ for (var in target_vars) {
   # MIDAS with trend
   fit_trend <- tryCatch({
     midasr::midas_r(
-      y_train ~ trend_train + mls(y_train, k = 1, m = 1) + fmls(x_train, k = 2, m = 3),
+      y_train ~ trend_train + midasr::mls(y_train, k = 1:2, m = 1) + midasr::fmls(x_train, k = 2, m = 3),
       start = list(x_train = rep(0, 3))
     )
   }, error = function(e) {
@@ -113,7 +113,7 @@ for (var in target_vars) {
   # MIDAS without trend
   fit_simple <- tryCatch({
     midasr::midas_r(
-      y_train ~ mls(y_train, k = 1, m = 1) + fmls(x_train, k = 2, m = 3),
+      y_train ~ midasr::mls(y_train, k = 1:2, m = 1) + midasr::fmls(x_train, k = 2, m = 3),
       start = list(x_train = rep(0, 3))
     )
   }, error = function(e) {

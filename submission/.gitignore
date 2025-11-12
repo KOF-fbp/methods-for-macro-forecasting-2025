@@ -58,18 +58,15 @@ ENV/
 *.swp
 *.swo
 
-# AI agent instructions (development-only, not for submission)
 .github/
 .cursorrules
 .windsurfrules
 .clinerules
-AGENT.md
-AGENTS.md
-CLAUDE.md
 
 # Temporary debug/test files (not for submission)
 tmp_*.R
 tmp_*.py
+tmp_*.rds
 test_*.ipynb
 
 # Log files

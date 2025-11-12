@@ -1,0 +1,13 @@
+variable,quarter,quarter_end,step_ahead,horizon,midas_trend,midas_simple,actual
+gdp_growth,2024 Q4,2024-12-31,1,1-step ahead,NA,NA,1.3156274812899937
+gdp_growth,2025 Q1,2025-03-31,2,2-step ahead,NA,NA,2.2430073144406037
+gdp_growth,2025 Q2,2025-06-30,3,3-step ahead,NA,NA,-0.09620412701139003
+gdp_growth,2025 Q3,2025-09-30,4,1-year ahead,NA,NA,-0.3289627178062915
+inflation,2024 Q4,2024-12-31,1,1-step ahead,NA,NA,-0.025275077754116637
+inflation,2025 Q1,2025-03-31,2,2-step ahead,NA,NA,0.020479440281206962
+inflation,2025 Q2,2025-06-30,3,3-step ahead,NA,NA,0.08229123314116293
+inflation,2025 Q3,2025-09-30,4,1-year ahead,NA,NA,0.6122884651894367
+exch_rate,2024 Q4,2024-12-31,1,1-step ahead,NA,NA,-0.06616821551812571
+exch_rate,2025 Q1,2025-03-31,2,2-step ahead,NA,NA,-0.055630925582173515
+exch_rate,2025 Q2,2025-06-30,3,3-step ahead,NA,NA,-0.06491370262045415
+exch_rate,2025 Q3,2025-09-30,4,1-year ahead,NA,NA,-0.06684019298606815

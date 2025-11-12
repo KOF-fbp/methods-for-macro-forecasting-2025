@@ -9,6 +9,25 @@ if (!interactive()) {
   }
 }
 
+cli_args <- commandArgs(trailingOnly = TRUE)
+fast_mode <- any(cli_args %in% c("--fast", "-f")) || identical(Sys.getenv("MFVAR_FAST"), "1")
+skip_cv <- "--no-cv" %in% cli_args
+if ("--with-cv" %in% cli_args) skip_cv <- FALSE
+max_folds_override <- NA_integer_
+max_folds_arg <- cli_args[grepl("^--max-folds=", cli_args)]
+if (length(max_folds_arg)) {
+  max_folds_override <- suppressWarnings(as.integer(sub("^--max-folds=", "", max_folds_arg[1])))
+}
+if (fast_mode && !("--with-cv" %in% cli_args)) {
+  skip_cv <- TRUE
+}
+if (fast_mode) {
+  message("→ Fast mode enabled: using single-threaded execution and trimmed CV settings.")
+}
+if (skip_cv) {
+  message("→ Cross-validation will be skipped (use --with-cv to re-enable).")
+}
+
 source(file.path("R", "setup.R"))
 source(file.path("R", "data_processing.R"))
 source(file.path("R", "evaluation.R"))
@@ -46,6 +65,10 @@ activate_project()
 
 all_pkgs <- unique(c(required_pkgs, "midasr", "forecast", "purrr", "future", "future.apply"))
 load_required_packages(all_pkgs)
+progress_available <- requireNamespace("progressr", quietly = TRUE)
+if (progress_available) {
+  progressr::handlers(global = TRUE, progressr::handler_txtprogressbar)
+}
 stage_status(status = "done")
 
 DATA_DIR <- file.path(".", "data")
@@ -147,44 +170,58 @@ forecast_mfvar <- function(q_train_adj, baro_train, transforms, n_lags, horizon_
   result
 }
 
-forecast_midas_series <- function(y_series, train_rows, x_train, x_future, horizon, include_trend) {
+forecast_midas_series <- function(y_series, train_rows, x_train_full, x_future_full, horizon, include_trend) {
+  # Extract training portion of y series
   y_train <- stats::window(y_series, end = stats::time(y_series)[train_rows])
   trend_train <- seq_len(length(y_train))
+  
+  # Rename to match run_midas.R convention
+  x_train <- x_train_full
+  x_test <- x_future_full
 
-  data_list <- list(y = y_train, x = x_train)
-  formula_obj <- stats::as.formula("y ~ mls(y, k = 1, m = 1) + fmls(x, k = 2, m = 3)")
-
+  # Build formulas exactly as run_midas.R does
   if (isTRUE(include_trend)) {
-    data_list$trend <- trend_train
-    formula_obj <- stats::as.formula("y ~ trend + mls(y, k = 1, m = 1) + fmls(x, k = 2, m = 3)")
+    fit <- try(
+      midasr::midas_r(
+        y_train ~ trend_train + midasr::mls(y_train, k = 1:2, m = 1) + midasr::fmls(x = x_train, k = 2, m = 3),
+        start = list(x_train = rep(0, 3))
+      ),
+      silent = TRUE
+    )
+  } else {
+    fit <- try(
+      midasr::midas_r(
+        y_train ~ midasr::mls(y_train, k = 1:2, m = 1) + midasr::fmls(x = x_train, k = 2, m = 3),
+        start = list(x_train = rep(0, 3))
+      ),
+      silent = TRUE
+    )
   }
 
-  fit <- try(
-    midasr::midas_r(formula_obj, data = data_list, start = list(x = rep(0, 3))),
-    silent = TRUE
-  )
-
   if (inherits(fit, "try-error")) {
-    warning(as.character(fit), call. = FALSE)
+    message(sprintf("MIDAS fit error: %s", as.character(fit)))
     return(rep(NA_real_, horizon))
   }
 
-  newdata <- list(x = x_future)
+  # Prepare newdata matching run_midas.R pattern
   if (isTRUE(include_trend)) {
-    newdata$trend <- trend_train[length(trend_train)] + seq_len(horizon)
+    trend_test <- trend_train[length(trend_train)] + seq_len(horizon)
+    newdata <- list(x_train = x_test, trend_train = trend_test)
+  } else {
+    newdata <- list(x_train = x_test)
   }
 
   fc <- try(
-    midasr::forecast(fit, newdata = newdata, h = horizon, method = "dynamic"),
+    midasr::forecast(fit, newdata = newdata, h = horizon, method = "static")$mean,
     silent = TRUE
   )
 
   if (inherits(fc, "try-error")) {
-    warning(as.character(fc), call. = FALSE)
+    message(sprintf("MIDAS forecast error: %s", as.character(fc)))
     return(rep(NA_real_, horizon))
   }
 
-  as.numeric(fc$mean)
+  as.numeric(fc)
 }
 
 summarise_metrics <- function(tbl) {
@@ -204,11 +241,24 @@ summarise_metrics <- function(tbl) {
 }
 
 table_to_markdown <- function(df, headers) {
-  if (!nrow(df)) return(character())
+  if (!is.data.frame(df) || !nrow(df) || !ncol(df)) return(character())
+  result_df <- df
+  # Ensure character representation for consistent markdown alignment
+  for (col in names(result_df)) {
+    result_df[[col]] <- as.character(result_df[[col]])
+  }
+  if (length(headers)) {
+    colnames(result_df) <- headers
+  } else {
+    headers <- colnames(result_df)
+  }
   header_line <- paste0("| ", paste(headers, collapse = " | "), " |")
-  separator_line <- paste0("|", paste(rep("---", length(headers)), collapse = "|"), "|")
-  body_lines <- apply(df, 1, function(row) paste0("| ", paste(row, collapse = " | "), " |"))
-  c(header_line, separator_line, body_lines)
+  separator_line <- paste0("| ", paste(rep("---", length(headers)), collapse = " | "), " |")
+  body_lines <- vapply(seq_len(nrow(result_df)), function(i) {
+    row_values <- unlist(result_df[i, , drop = FALSE], use.names = FALSE)
+    paste0("| ", paste(row_values, collapse = " | "), " |")
+  }, character(1))
+  c(header_line, separator_line, body_lines, "")
 }
 
 run_benchmark_cross_validation <- function(
@@ -283,14 +333,26 @@ run_benchmark_cross_validation <- function(
   desired_workers <- max(1L, min(desired_workers, total_folds))
   use_parallel <- total_folds > 1L && desired_workers > 1L
 
-  if (use_parallel && show_fold_progress) {
+  progress_enabled <- show_fold_progress && isTRUE(progress_available)
+
+  if (use_parallel && show_fold_progress && !progress_enabled) {
     message(sprintf("  • Running %d CV folds using %d worker(s)...", total_folds, desired_workers))
   }
 
-  run_single_fold <- function(fold_pos) {
+  run_single_fold <- function(fold_pos, progress_callback = NULL) {
     idx <- cv_indices[fold_pos]
     train_rows <- idx - 1L
+    cutoff_label <- "<insufficient history>"
+    progress_state <- "completed"
+    emit_progress <- function(state = progress_state) {
+      if (!is.null(progress_callback)) {
+        progress_callback(sprintf("Fold %02d/%02d (%s) %s", fold_pos, total_folds, cutoff_label, state))
+      }
+    }
+    on.exit(emit_progress(), add = TRUE)
+
     if (train_rows <= n_lags) {
+      progress_state <- "skipped (too few quarters)"
       return(NULL)
     }
 
@@ -303,7 +365,7 @@ run_benchmark_cross_validation <- function(
     forecast_quarters <- q_eval_orig$qtr
     quarter_end_dates <- zoo::as.Date(forecast_quarters, frac = 1)
 
-    if (show_fold_progress && !use_parallel) {
+    if (show_fold_progress && !use_parallel && !progress_enabled) {
       message(sprintf("  • CV fold %02d/%02d | training through %s", fold_pos, total_folds, cutoff_label))
     }
 
@@ -341,21 +403,12 @@ run_benchmark_cross_validation <- function(
       )
     })
 
-    rw_base <- purrr::map_dfr(target_vars, function(var) {
-      preds <- predict_rw_trend(q_train_orig[[var]], horizon_max, var_label = var, context = sprintf("CV fold ending %s", cutoff_label))
-      tibble::tibble(
-        variable = var,
-        step_ahead = horizon_steps,
-        prediction = preds,
-        model = "RW-trend"
-      )
-    })
-
     train_last_month <- quarter_to_month_end(cutoff_quarter)
     x_train_full <- stats::window(baro_diff_series, end = train_last_month)
 
     if (length(x_train_full) != train_rows * months_per_quarter) {
       warning(sprintf("Skipping fold %s: monthly regressor length mismatch.", cutoff_label), call. = FALSE)
+      progress_state <- "skipped (monthly mismatch)"
       return(NULL)
     }
 
@@ -428,8 +481,7 @@ run_benchmark_cross_validation <- function(
         mfvar_pred,
         midas_trend_pred,
         midas_simple_pred,
-        ar_base,
-        rw_base
+        ar_base
       ) |>
         dplyr::mutate(
           extra_months = extra_months,
@@ -443,6 +495,7 @@ run_benchmark_cross_validation <- function(
 
     combined_predictions <- dplyr::bind_rows(fold_predictions)
     if (!nrow(combined_predictions)) {
+      progress_state <- "skipped (empty predictions)"
       return(NULL)
     }
 
@@ -452,13 +505,31 @@ run_benchmark_cross_validation <- function(
     )
   }
 
-  if (use_parallel) {
-    oplan <- future::plan()
-    on.exit(future::plan(oplan), add = TRUE)
-    future::plan(future::multisession, workers = desired_workers)
-    fold_results <- future.apply::future_lapply(seq_along(cv_indices), run_single_fold, future.seed = TRUE)
+  run_fold_collection <- function(callback) {
+    if (use_parallel) {
+      oplan <- future::plan()
+      on.exit(future::plan(oplan), add = TRUE)
+      future::plan(future::multisession, workers = desired_workers)
+      future.apply::future_lapply(
+        seq_along(cv_indices),
+        function(pos) run_single_fold(pos, progress_callback = callback),
+        future.seed = TRUE
+      )
+    } else {
+      lapply(
+        seq_along(cv_indices),
+        function(pos) run_single_fold(pos, progress_callback = callback)
+      )
+    }
+  }
+
+  if (progress_enabled) {
+    fold_results <- progressr::with_progress({
+      p <- progressr::progressor(steps = total_folds)
+      run_fold_collection(function(msg) p(message = msg))
+    })
   } else {
-    fold_results <- lapply(seq_along(cv_indices), run_single_fold)
+    fold_results <- run_fold_collection(NULL)
   }
 
   fold_results <- purrr::compact(fold_results)
@@ -615,15 +686,6 @@ ar_holdout <- purrr::map_dfr(target_vars, function(var) {
   )
 })
 
-rw_holdout <- purrr::map_dfr(target_vars, function(var) {
-  tibble::tibble(
-    variable = var,
-    step_ahead = seq_len(eval_horizon),
-    prediction = predict_rw_trend(q_train_orig[[var]], eval_horizon, var_label = var, context = "holdout"),
-    model = "RW-trend"
-  )
-})
-
 midas_trend_holdout <- purrr::map_dfr(target_vars, function(var) {
   preds <- forecast_midas_series(
     y_ts_list[[var]],
@@ -652,7 +714,6 @@ midas_simple_holdout <- purrr::map_dfr(target_vars, function(var) {
 predictions_tbl <- dplyr::bind_rows(
   mfvar_holdout,
   ar_holdout,
-  rw_holdout,
   midas_trend_holdout,
   midas_simple_holdout
 ) |>
@@ -697,41 +758,88 @@ forecast_wide <- predictions_tbl |>
 
 stage_status(status = "done")
 
-stage_status("Cross-validation evaluation", "start")
+run_cv <- !skip_cv
+
+if (run_cv) {
+  stage_status("Cross-validation evaluation", "start")
+} else {
+  stage_status("Cross-validation evaluation", "start")
+  stage_status(status = "skip")
+}
 
 cv_initial_quarter <- zoo::as.yearqtr("2015 Q4")
 cv_extra_months <- 0:2
+extra_env <- Sys.getenv("MFVAR_CV_EXTRA_MONTHS", "")
+if (nzchar(extra_env)) {
+  extra_split <- unlist(strsplit(extra_env, ","))
+  extra_parsed <- suppressWarnings(as.integer(extra_split))
+  if (length(extra_parsed) && !all(is.na(extra_parsed))) {
+    cv_extra_months <- stats::na.omit(extra_parsed)
+  }
+}
+if (fast_mode) {
+  candidate <- intersect(cv_extra_months, 0:1)
+  if (length(candidate)) cv_extra_months <- candidate
+}
+if (!length(cv_extra_months)) cv_extra_months <- 0L
+
 cv_max_folds <- 28L
-cv_output <- run_benchmark_cross_validation(
-  qdat_adj = qdat_adj,
-  qdat_orig = qdat_orig,
-  transforms = transforms,
-  baro_ts = baro_ts,
-  baro_diff_series = baro_diff_series,
-  y_ts_list = y_ts_list,
-  target_vars = target_vars,
-  forecast_steps = forecast_steps,
-  n_lags = n_lags,
-  extra_months_options = cv_extra_months,
-  max_folds = cv_max_folds,
-  initial_train_quarter = cv_initial_quarter,
-  progress = TRUE
-)
+env_max <- suppressWarnings(as.integer(Sys.getenv("MFVAR_CV_MAX_FOLDS", "")))
+if (!is.na(env_max)) {
+  cv_max_folds <- env_max
+}
+if (!is.na(max_folds_override)) {
+  cv_max_folds <- max_folds_override
+}
+if (fast_mode) {
+  cv_max_folds <- min(cv_max_folds, 4L)
+}
 
-cv_results <- cv_output$results
-cv_metrics_tbl <- cv_output$metrics_by_horizon
-cv_metrics_overall <- cv_output$metrics_overall
-cv_folds_tbl <- cv_output$folds
+if (run_cv) {
+  cv_output <- run_benchmark_cross_validation(
+    qdat_adj = qdat_adj,
+    qdat_orig = qdat_orig,
+    transforms = transforms,
+    baro_ts = baro_ts,
+    baro_diff_series = baro_diff_series,
+    y_ts_list = y_ts_list,
+    target_vars = target_vars,
+    forecast_steps = forecast_steps,
+    n_lags = n_lags,
+    extra_months_options = cv_extra_months,
+    max_folds = cv_max_folds,
+    initial_train_quarter = cv_initial_quarter,
+    progress = !fast_mode
+  )
 
-if (!nrow(cv_results)) {
-  stage_status(status = "skip")
+  cv_results <- cv_output$results
+  cv_metrics_tbl <- cv_output$metrics_by_horizon
+  cv_metrics_overall <- cv_output$metrics_overall
+  cv_folds_tbl <- cv_output$folds
+
+  if (!nrow(cv_results)) {
+    stage_status(status = "skip")
+  } else {
+    stage_status(status = "done")
+    message(sprintf(
+      "Cross-validation processed %d folds across %d coverage settings.",
+      cv_output$fold_count,
+      length(cv_output$extra_values)
+    ))
+  }
 } else {
-  stage_status(status = "done")
-  message(sprintf(
-    "Cross-validation processed %d folds across %d coverage settings.",
-    cv_output$fold_count,
-    length(cv_output$extra_values)
-  ))
+  cv_output <- list(
+    results = tibble::tibble(),
+    metrics_by_horizon = tibble::tibble(),
+    metrics_overall = tibble::tibble(),
+    folds = tibble::tibble(),
+    fold_count = 0L,
+    extra_values = integer()
+  )
+  cv_results <- cv_output$results
+  cv_metrics_tbl <- cv_output$metrics_by_horizon
+  cv_metrics_overall <- cv_output$metrics_overall
+  cv_folds_tbl <- cv_output$folds
 }
 
 # --- Output summaries and plots --------------------------------------------
@@ -754,17 +862,29 @@ summary_overall_tbl <- metric_inputs |>
   ) |>
   dplyr::select(model, Observations, RMSE, MAE)
 
-summary_cv_tbl <- cv_metrics_tbl |>
-  dplyr::arrange(extra_months, model, horizon) |>
-  dplyr::mutate(
-    `Monthly data` = coverage_label(extra_months),
-    RMSE = sprintf("%.4f", rmse),
-    MAE = sprintf("%.4f", mae),
-    Observations = as.character(observations)
-  ) |>
-  dplyr::select(`Monthly data`, model, horizon, Observations, RMSE, MAE)
+summary_cv_tbl <- if (nrow(cv_metrics_tbl)) {
+  cv_metrics_tbl |>
+    dplyr::arrange(extra_months, model, horizon) |>
+    dplyr::mutate(
+      `Monthly data` = coverage_label(extra_months),
+      RMSE = sprintf("%.4f", rmse),
+      MAE = sprintf("%.4f", mae),
+      Observations = as.character(observations)
+    ) |>
+    dplyr::select(`Monthly data`, model, horizon, Observations, RMSE, MAE)
+} else {
+  tibble::tibble()
+}
 
 summary_path <- file.path(OUT_DIR, "model_benchmark_summary.md")
+cv_summary_lines <- table_to_markdown(summary_cv_tbl, c("Monthly data", "Model", "Horizon", "Observations", "RMSE", "MAE"))
+if (!length(cv_summary_lines)) {
+  if (!run_cv) {
+    cv_summary_lines <- "Cross-validation skipped (--fast/--no-cv)."
+  } else {
+    cv_summary_lines <- "No cross-validation results (insufficient data)."
+  }
+}
 summary_lines <- c(
   "# Benchmark Error Summary",
   "",
@@ -775,26 +895,24 @@ summary_lines <- c(
   table_to_markdown(summary_overall_tbl, c("Model", "Observations", "RMSE", "MAE")),
   "",
   "## Rolling Cross-Validation RMSE and MAE by Monthly Coverage",
-  table_to_markdown(summary_cv_tbl, c("Monthly data", "Model", "Horizon", "Observations", "RMSE", "MAE"))
+  cv_summary_lines
 )
 readr::write_lines(summary_lines, summary_path)
 
-plot_models <- c("Actual", "MF-VAR", "MIDAS (trend)", "MIDAS", "AR(2)", "RW-trend")
+plot_models <- c("Actual", "MF-VAR", "MIDAS (trend)", "MIDAS", "AR(2)")
 colour_map <- c(
   "Actual" = "#000000",
   "MF-VAR" = "#1b9e77",
   "MIDAS (trend)" = "#7570b3",
   "MIDAS" = "#d95f02",
-  "AR(2)" = "#e7298a",
-  "RW-trend" = "#66a61e"
+  "AR(2)" = "#e7298a"
 )
 linetype_map <- c(
   "Actual" = "solid",
   "MF-VAR" = "solid",
   "MIDAS (trend)" = "dashed",
   "MIDAS" = "dashed",
-  "AR(2)" = "dotted",
-  "RW-trend" = "dotdash"
+  "AR(2)" = "dotted"
 )
 
 plot_paths <- purrr::map_chr(target_vars, function(var) {
@@ -864,15 +982,23 @@ plot_paths <- purrr::map_chr(target_vars, function(var) {
   plot_path
 })
 
-cv_metrics_export <- cv_metrics_tbl |>
-  dplyr::mutate(monthly_coverage = coverage_label(extra_months)) |>
-  dplyr::relocate(monthly_coverage, .before = model)
+if (nrow(cv_metrics_tbl) && "extra_months" %in% names(cv_metrics_tbl)) {
+  cv_metrics_export <- cv_metrics_tbl |>
+    dplyr::mutate(monthly_coverage = coverage_label(extra_months)) |>
+    dplyr::relocate(monthly_coverage, .before = model)
+} else {
+  cv_metrics_export <- cv_metrics_tbl
+}
 
-cv_results_export <- cv_results |>
-  dplyr::mutate(monthly_coverage = coverage_label(extra_months)) |>
-  dplyr::rename(fold = fold_index) |>
-  dplyr::relocate(monthly_coverage, extra_months, fold, cutoff_quarter, forecast_quarter, .before = variable) |>
-  dplyr::arrange(extra_months, fold, variable, step_ahead)
+if (nrow(cv_results) && all(c("extra_months", "fold_index") %in% names(cv_results))) {
+  cv_results_export <- cv_results |>
+    dplyr::mutate(monthly_coverage = coverage_label(extra_months)) |>
+    dplyr::rename(fold = fold_index) |>
+    dplyr::relocate(monthly_coverage, extra_months, fold, cutoff_quarter, forecast_quarter, .before = variable) |>
+    dplyr::arrange(extra_months, fold, variable, step_ahead)
+} else {
+  cv_results_export <- cv_results
+}
 
 readr::write_csv(metrics_tbl, file.path(OUT_DIR, "model_benchmark_metrics.csv"))
 readr::write_csv(holdout_metrics_detailed, file.path(OUT_DIR, "model_benchmark_holdout_detailed.csv"))

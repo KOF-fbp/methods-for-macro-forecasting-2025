@@ -1,0 +1,5 @@
+model,horizon,rmse,mae,n_obs
+midas_simple,1-step ahead,NA,NA,0
+midas_simple,1-year ahead,NA,NA,0
+midas_trend,1-step ahead,NA,NA,0
+midas_trend,1-year ahead,NA,NA,0
