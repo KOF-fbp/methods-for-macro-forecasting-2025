@@ -175,44 +175,34 @@ forecast_midas_series <- function(y_series, train_rows, x_train_full, x_future_f
   y_train <- stats::window(y_series, end = stats::time(y_series)[train_rows])
   trend_train <- seq_len(length(y_train))
   
-  # Rename to match run_midas.R convention
-  x_train <- x_train_full
-  x_test <- x_future_full
+  # Use data list approach (required for midasr::forecast to work)
+  data_list <- list(y = y_train, x = x_train_full)
+  formula_obj <- stats::as.formula("y ~ mls(y, k = 1, m = 1) + fmls(x, k = 2, m = 3)")
 
-  # Build formulas exactly as run_midas.R does
   if (isTRUE(include_trend)) {
-    fit <- try(
-      midasr::midas_r(
-        y_train ~ trend_train + midasr::mls(y_train, k = 1:2, m = 1) + midasr::fmls(x = x_train, k = 2, m = 3),
-        start = list(x_train = rep(0, 3))
-      ),
-      silent = TRUE
-    )
-  } else {
-    fit <- try(
-      midasr::midas_r(
-        y_train ~ midasr::mls(y_train, k = 1:2, m = 1) + midasr::fmls(x = x_train, k = 2, m = 3),
-        start = list(x_train = rep(0, 3))
-      ),
-      silent = TRUE
-    )
+    data_list$trend <- trend_train
+    formula_obj <- stats::as.formula("y ~ trend + mls(y, k = 1, m = 1) + fmls(x, k = 2, m = 3)")
   }
+
+  fit <- try(
+    midasr::midas_r(formula_obj, data = data_list, start = list(x = rep(0, 3))),
+    silent = TRUE
+  )
 
   if (inherits(fit, "try-error")) {
     message(sprintf("MIDAS fit error: %s", as.character(fit)))
     return(rep(NA_real_, horizon))
   }
 
-  # Prepare newdata matching run_midas.R pattern
+  # Prepare newdata with matching variable names
+  newdata <- list(x = x_future_full)
   if (isTRUE(include_trend)) {
-    trend_test <- trend_train[length(trend_train)] + seq_len(horizon)
-    newdata <- list(x_train = x_test, trend_train = trend_test)
-  } else {
-    newdata <- list(x_train = x_test)
+    newdata$trend <- trend_train[length(trend_train)] + seq_len(horizon)
   }
 
+  # Use dynamic forecasting (works better than static for multi-step ahead)
   fc <- try(
-    midasr::forecast(fit, newdata = newdata, h = horizon, method = "static")$mean,
+    midasr::forecast(fit, newdata = newdata, h = horizon, method = "dynamic"),
     silent = TRUE
   )
 
@@ -221,7 +211,7 @@ forecast_midas_series <- function(y_series, train_rows, x_train_full, x_future_f
     return(rep(NA_real_, horizon))
   }
 
-  as.numeric(fc)
+  as.numeric(fc$mean)
 }
 
 summarise_metrics <- function(tbl) {
@@ -457,8 +447,8 @@ run_benchmark_cross_validation <- function(
         preds <- forecast_midas_series(
           y_series = y_ts_list[[var]],
           train_rows = train_rows,
-          x_train = x_train_full,
-          x_future = x_future_ts,
+          x_train_full = x_train_full,
+          x_future_full = x_future_ts,
           horizon = horizon_max,
           include_trend = TRUE
         )
@@ -469,8 +459,8 @@ run_benchmark_cross_validation <- function(
         preds <- forecast_midas_series(
           y_series = y_ts_list[[var]],
           train_rows = train_rows,
-          x_train = x_train_full,
-          x_future = x_future_ts,
+          x_train_full = x_train_full,
+          x_future_full = x_future_ts,
           horizon = horizon_max,
           include_trend = FALSE
         )
