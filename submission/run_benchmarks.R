@@ -175,13 +175,13 @@ forecast_midas_series <- function(y_series, train_rows, x_train_full, x_future_f
   y_train <- stats::window(y_series, end = stats::time(y_series)[train_rows])
   trend_train <- seq_len(length(y_train))
   
-  # Use data list approach (required for midasr::forecast to work)
+  # Use data list approach (required for midasr::forecast to work) with AR(2)
   data_list <- list(y = y_train, x = x_train_full)
-  formula_obj <- stats::as.formula("y ~ mls(y, k = 1, m = 1) + fmls(x, k = 2, m = 3)")
+  formula_obj <- stats::as.formula("y ~ mls(y, k = 1:2, m = 1) + fmls(x, k = 2, m = 3)")
 
   if (isTRUE(include_trend)) {
     data_list$trend <- trend_train
-    formula_obj <- stats::as.formula("y ~ trend + mls(y, k = 1, m = 1) + fmls(x, k = 2, m = 3)")
+    formula_obj <- stats::as.formula("y ~ trend + mls(y, k = 1:2, m = 1) + fmls(x, k = 2, m = 3)")
   }
 
   fit <- try(
