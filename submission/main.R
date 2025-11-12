@@ -32,7 +32,11 @@ Available workflows:
                Produces forecasts, evaluation tables, and plots.
                Output: output/mfvar_forecasts_*.csv, mfvar_summary.txt, plots
                
-  benchmark  - Run benchmark model comparison (MF-VAR vs MIDAS vs AR(2) vs RW-trend)
+  midas      - Run MIDAS regression estimation and forecasting
+               Produces forecasts using mixed-data sampling approach.
+               Output: output/midas_forecasts_*.csv, midas_summary.txt, plots
+               
+  benchmarks - Run benchmark model comparison (MF-VAR vs MIDAS vs AR(2) vs RW-trend)
                Includes holdout evaluation and cross-validation.
                Output: output/model_benchmark_*.csv, comparison plots
                
@@ -45,7 +49,8 @@ Available workflows:
 Examples:
   Rscript main.R              # Run MF-VAR pipeline (default)
   Rscript main.R mfvar        # Explicitly run MF-VAR
-  Rscript main.R benchmark    # Run benchmark comparison
+  Rscript main.R midas        # Run MIDAS
+  Rscript main.R benchmarks   # Run benchmark comparison
   Rscript main.R verify       # Verify environment setup
 
 For more details, see README.md
@@ -116,11 +121,27 @@ run_mfvar <- function() {
   cat("This may take several minutes.\n\n")
   
   tryCatch({
-    source("Draft_MFVAR.r", local = new.env())
+    source("run_mfvar.R", local = new.env())
     cat("\n✓ MF-VAR pipeline completed successfully!\n")
     cat("Check output/ directory for results.\n\n")
   }, error = function(e) {
     cat("\n✗ MF-VAR pipeline failed:\n")
+    cat(conditionMessage(e), "\n")
+    quit(save = "no", status = 1)
+  })
+}
+
+run_midas <- function() {
+  cat("\n=== Running MIDAS Pipeline ===\n\n")
+  cat("Starting MIDAS regression estimation and forecasting...\n")
+  cat("This may take several minutes.\n\n")
+  
+  tryCatch({
+    source("run_midas.R", local = new.env())
+    cat("\n✓ MIDAS pipeline completed successfully!\n")
+    cat("Check output/ directory for results.\n\n")
+  }, error = function(e) {
+    cat("\n✗ MIDAS pipeline failed:\n")
     cat(conditionMessage(e), "\n")
     quit(save = "no", status = 1)
   })
@@ -133,7 +154,7 @@ run_benchmark <- function() {
   cat("This may take several minutes.\n\n")
   
   tryCatch({
-    source("run_benchmark_models.R", local = new.env())
+    source("run_benchmarks.R", local = new.env())
     cat("\n✓ Benchmark comparison completed successfully!\n")
     cat("Check output/ directory for results.\n\n")
   }, error = function(e) {
@@ -146,7 +167,9 @@ run_benchmark <- function() {
 # Route to appropriate workflow
 switch(tolower(workflow),
   "mfvar" = run_mfvar(),
-  "benchmark" = run_benchmark(),
+  "midas" = run_midas(),
+  "benchmarks" = run_benchmark(),
+  "benchmark" = run_benchmark(),  # alias for backwards compatibility
   "verify" = verify_environment(),
   "help" = show_help(),
   "-h" = show_help(),

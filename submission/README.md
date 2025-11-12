@@ -32,9 +32,10 @@ A Bayesian mixed-frequency VAR (MF-VAR) pipeline for forecasting Swiss macroecon
 │
 ├── renv/                       # R package management
 │
-├── Draft_MFVAR.r              # Main MF-VAR workflow script
-├── run_benchmark_models.R     # Benchmark models comparison
-├── main.R                     # Entry point (Docker/CI smoke test)
+├── main.R                     # Entry point - unified workflow interface
+├── run_mfvar.R                # MF-VAR workflow script
+├── run_midas.R                # MIDAS workflow script
+├── run_benchmarks.R           # Benchmark comparison across all models
 └── README.md                  # This file
 ```
 
@@ -55,10 +56,13 @@ renv::restore()
 
 ### Running the Analysis
 
+All workflows can be run through the unified `main.R` interface:
+
 #### Option 1: MF-VAR Pipeline (Default)
 
 ```bash
-Rscript Draft_MFVAR.r
+Rscript main.R mfvar
+# or simply: Rscript main.R
 ```
 
 This runs the complete MF-VAR workflow:
@@ -74,13 +78,30 @@ This runs the complete MF-VAR workflow:
 - `output/mfvar_summary.txt` - Model diagnostics and evaluation
 - `output/forecast_*.png` - Forecast visualizations
 
-#### Option 2: Benchmark Comparison
+#### Option 2: MIDAS Pipeline
 
 ```bash
-Rscript run_benchmark_models.R
+Rscript main.R midas
 ```
 
-Compares MF-VAR against MIDAS, AR(2), and RW-trend models with:
+Runs MIDAS regression models with the KOF Barometer:
+1. Estimates MIDAS with and without trend
+2. Generates forecasts for target variables
+3. Computes evaluation metrics
+
+**Outputs:**
+- `output/midas_forecasts_full.csv` - All forecast horizons
+- `output/midas_forecasts_targets.csv` - 1-step and 1-year ahead only
+- `output/midas_summary.txt` - Model diagnostics
+- `output/midas_evaluation.csv` - Error metrics
+
+#### Option 3: Benchmark Comparison
+
+```bash
+Rscript main.R benchmarks
+```
+
+Compares all models (MF-VAR, MIDAS, AR(2), RW-trend) with:
 - Holdout evaluation
 - Rolling cross-validation (28 folds)
 - Multiple monthly data coverage scenarios
