@@ -1,0 +1,116 @@
+---
+title: "Mixed Frequency Approaches"
+subtitle: "MIDAS Mixed Frequency VARs"
+author: "Michal, Minna, Sam"
+format:
+  revealjs:
+    slide-number: true
+---
+
+
+```{r setup, include=FALSE}
+# Copy relevant artifacts from submission/output/ so the slides render self-contained
+copy_safe <- function(rel_src, rel_dst = basename(rel_src)) {
+  src <- file.path("..", "output", rel_src)
+  dst <- file.path(".", rel_dst)
+  if (file.exists(src)) try(suppressWarnings(file.copy(src, dst, overwrite = TRUE)), silent = TRUE)
+}
+
+# Plots: MF-VAR forecasts and benchmarks
+lapply(c(
+  "midas_forecast_plot.png",
+  "model_benchmark_plot.png",
+  "model_benchmark_plot_inflation.png",
+  "model_benchmark_plot_gdp_growth.png",
+  "model_benchmark_plot_exch_rate.png",
+  "forecast_gdp_growth.png",
+  "forecast_gdp_growth_context.png",
+  "forecast_inflation.png",
+  "forecast_inflation_context.png",
+  "forecast_exchange_rate.png",
+  "forecast_exchange_rate_context.png"
+), copy_safe)
+
+# Tables and summaries
+lapply(c(
+  "mse_results.csv",
+  "model_benchmark_metrics.csv",
+  "model_benchmark_holdout_detailed.csv",
+  "mfvar_forecasts_targets.csv",
+  "mfvar_forecasts_full.csv",
+  "forecast_evaluation.csv",
+  "forecast_cross_validation.csv",
+  "mfvar_summary.txt",
+  "model_benchmark_summary.md"
+), copy_safe)
+```
+
+
+## Motivation: Why Mixed Frequency?
+- no loss of information
+- gain more insights
+
+## Why MIDAS? 
+- reduces parameter proliferation
+- cheap & stable
+
+## MIDAS Equation 
+
+Explain every component...
+$$
+y_t = \beta_0 + \sum_{k=0}^{K} \beta(k;\theta)\, x_{t-k/m} + \varepsilon_t
+$$
+
+
+## Our chosen MIDAS
+
+
+MIDAS with AR(1) and a trend component
+$$
+y_t = \beta_0
+      + \phi\, y_{t-1}
+      + \delta \, t
+      + \sum_{k=0}^{K} \beta(k;\theta)\, x_{t - k/m}
+      + \varepsilon_t
+$$
+
+## Reality...
+
+::: {.panel-tabset}
+
+### Plot
+<!-- "../../data/metadata_quarterly.csv" -->
+![](midas_forecast_plot.png)
+
+### Evaluation
+
+```{r}
+mse <- read.csv("mse_results.csv")
+print(mse)
+```
+
+:::
+
+## Why MF-VAR?
+
+# Do we have to choose a model, or can we do both?
+
+## Methodology: chosen model and estimation approach 
+- MF-VAR or MIDAS? 
+- pros and cons MIDAS and MF-VAR, MIDAS is reduced form of MF-VAR 
+
+## Data: variables, frequency, sample period 
+- Description of data that we were provided + the additional data that we decided to use 
+
+## Results & Forecast Evaluation: forecasts and assessment  
+Pretty plots + tables that show errors, both also with AR(2) benchmark 
+
+## Interpretation: economic meaning and intuition 
+tbd
+
+## Takeaways: main findings and policy relevance 
+tbd 
+
+## Reproducibility: GitHub repository with code & data 
+
+- [Our Repository](https://github.com/mddudko/methods-for-macro-forecasting-2025)
