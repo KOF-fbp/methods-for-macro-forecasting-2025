@@ -6,15 +6,14 @@
 *.Rproj
 .Ruserdata
 
-# Output files (generated)
-output/*.csv
-output/*.txt
-output/*.png
-output/*.rds
-output/*.pdf
-
-# Keep the output directory structure
-!output/.gitkeep
+# Output files (included in repo for reproducibility)
+# Users can see results without running time-consuming models
+# Uncomment lines below to exclude outputs from version control:
+# output/*.csv
+# output/*.txt
+# output/*.png
+# output/*.rds
+# output/*.pdf
 
 # Temporary files
 *.tmp
