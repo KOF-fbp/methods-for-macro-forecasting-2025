@@ -299,7 +299,7 @@ Notes
 ## Work in Progress
 - extension: economic indicator
 - midas: adding different models, i.e. generalised, unrestricted, non-parametric, etc.
-- cross validation: rolling/expanding window
+- cross validation: expanding window implemented
 
 ## Questions:
 - How much detail should we each go into our own approaches?

@@ -12,7 +12,7 @@ This project implements and compares two approaches for forecasting Swiss macroe
 1. **Mixed-Frequency Bayesian VAR (MF-VAR)** - Incorporates monthly KOF Barometer data with quarterly GDP, inflation, and exchange rate series
 2. **MIDAS Regression** - Uses polynomial distributed lag structures to mix data frequencies
 
-The analysis includes rigorous evaluation through holdout testing and rolling cross-validation, with comprehensive benchmark comparisons against AR(2) and random walk models.
+The analysis includes rigorous evaluation through holdout testing and expanding window cross-validation, with comprehensive benchmark comparisons against AR(2) and random walk models.
 
 ## Authors
 
@@ -122,7 +122,7 @@ Rscript main.R benchmarks
 
 Compares all models (MF-VAR, MIDAS, AR(2), RW-trend) with:
 - Holdout evaluation
-- Rolling cross-validation (28 folds)
+- Expanding window cross-validation (28 folds)
 - Multiple monthly data coverage scenarios
 
 **Outputs:**
@@ -194,7 +194,7 @@ Edit main scripts to adjust:
 
 ### `R/evaluation.R`
 - `run_holdout_evaluation()` - Holdout forecast accuracy
-- `run_cross_validation()` - Rolling one-step-ahead CV
+- `run_cross_validation()` - Expanding window one-step-ahead CV
 - `predict_ar2()` - AR(2) benchmark with fallbacks
 - `compute_time_index()` - Map forecast steps to time indices
 - `restore_series_values()` - Reverse transformations
@@ -223,7 +223,7 @@ Edit main scripts to adjust:
 
 ### Evaluation
 - **Holdout**: Reserve last 4 quarters, compare forecasts to actuals
-- **Cross-validation**: Rolling 1-step ahead starting from 2015 Q4
+- **Cross-validation**: Expanding window 1-step ahead starting from 2015 Q4
 - **Metrics**: RMSE, MAE by horizon and overall
 
 ### Output

@@ -38,7 +38,7 @@ n_lags <- 5
 
 # --- Evaluation suites ------------------------------------------------------
 # Benchmark MF-VAR forecasts against AR(2) both on a holdout window and
-# in rolling one-step-ahead cross-validation.
+# in expanding window one-step-ahead cross-validation.
 holdout_results <- run_holdout_evaluation(qdat_adj, qdat_orig, baro_ts, n_lags, target_vars, transforms, OUT_DIR)
 cv_results <- run_cross_validation(qdat_adj, qdat_orig, baro_ts, n_lags, target_vars, transforms, OUT_DIR)
 
@@ -118,7 +118,7 @@ if (!is.null(holdout_results$table)) {
   cat("\nSkipped (insufficient holdout sample after reserving lags).\n")
 }
 
-cat("\n==== Rolling 1-step cross-validation ====\n")
+cat("\n==== Expanding window 1-step cross-validation ====\n")
 if (!is.null(cv_results$table)) {
   cat(sprintf("\nFolds: %d (last %d quarter(s)).\n\n", cv_results$folds, cv_results$horizon))
   print(cv_results$table, n = nrow(cv_results$table))

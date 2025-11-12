@@ -169,9 +169,16 @@ holdout <- run_holdout_evaluation(qdat, baro_aligned, n_lags = 5, target_vars = 
 holdout$table
 ```
 
-## Rolling Cross-Validation
+## Expanding Window Cross-Validation
 
-Cross-validation iterates over the last `min(8, nrow(qdat) - (n_lags + 2))` quarters, re-estimating the model each time and forecasting one step ahead. The loop saves fold-level predictions for further diagnostics.
+Cross-validation iterates over the last quarters using an expanding window approach (training always starts from the beginning and expands). The model is re-estimated each time, forecasting one step ahead. The loop saves fold-level predictions for further diagnostics.
+
+```{r}
+```
+
+## Expanding Window Cross-Validation
+
+Cross-validation iterates over the last `min(8, nrow(qdat) - (n_lags + 2))` quarters, re-estimating the model each time and forecasting one step ahead. The training window starts from the beginning and expands to include more observations with each fold.
 
 ```{r}
 cv <- run_cross_validation(qdat, baro_aligned, n_lags = 5, target_vars = target_variables, out_dir = tempdir())

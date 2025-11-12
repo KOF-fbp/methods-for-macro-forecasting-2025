@@ -126,6 +126,8 @@ run_holdout_evaluation <- function(qdat_adj, qdat_orig, baro_ts, n_lags, target_
 }
 
 run_cross_validation <- function(qdat_adj, qdat_orig, baro_ts, n_lags, target_vars, transforms, out_dir, max_folds = getOption("mfvar.cv_max_folds", Inf)) {
+  # Expanding window cross-validation: training window starts from beginning
+  # and expands to include more observations as we move forward in time
   cv_table <- NULL
   cv_path <- NULL
   folds_path <- NULL
@@ -149,6 +151,8 @@ run_cross_validation <- function(qdat_adj, qdat_orig, baro_ts, n_lags, target_va
         next
       }
 
+      # Expanding window: always train from row 1 to train_rows
+      # As idx increases, train_rows increases, expanding the training set
       q_train_adj <- qdat_adj |> dplyr::slice_head(n = train_rows)
       q_train_orig <- qdat_orig |> dplyr::slice_head(n = train_rows)
       q_test_orig <- qdat_orig |> dplyr::slice(idx)

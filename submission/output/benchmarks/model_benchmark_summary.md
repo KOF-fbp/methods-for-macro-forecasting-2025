@@ -22,5 +22,5 @@
 | MIDAS (trend) | 12 | 1.6162 | 0.8493 |
 
 
-## Rolling Cross-Validation RMSE and MAE by Monthly Coverage
+## Expanding Window Cross-Validation RMSE and MAE by Monthly Coverage
 Cross-validation skipped (--fast/--no-cv).

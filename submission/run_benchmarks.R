@@ -265,6 +265,8 @@ run_benchmark_cross_validation <- function(
     max_folds = Inf,
     initial_train_quarter = zoo::as.yearqtr("2015 Q4"),
     progress = TRUE) {
+  # Expanding window cross-validation: training always starts from the beginning
+  # and expands to include more data as we move forward in time
 
   horizon_max <- max(forecast_steps)
   horizon_steps <- seq_len(horizon_max)
@@ -346,6 +348,8 @@ run_benchmark_cross_validation <- function(
       return(NULL)
     }
 
+    # Expanding window: always train from row 1 to train_rows
+    # As idx increases, train_rows increases, expanding the training set
     q_train_adj <- dplyr::slice_head(qdat_adj, n = train_rows)
     q_train_orig <- dplyr::slice_head(qdat_orig, n = train_rows)
     q_eval_orig <- dplyr::slice(qdat_orig, idx:(idx + horizon_max - 1L))
@@ -884,7 +888,7 @@ summary_lines <- c(
   "## Holdout Overall Average Errors",
   table_to_markdown(summary_overall_tbl, c("Model", "Observations", "RMSE", "MAE")),
   "",
-  "## Rolling Cross-Validation RMSE and MAE by Monthly Coverage",
+  "## Expanding Window Cross-Validation RMSE and MAE by Monthly Coverage",
   cv_summary_lines
 )
 readr::write_lines(summary_lines, summary_path)
