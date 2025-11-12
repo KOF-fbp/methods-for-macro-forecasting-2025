@@ -173,15 +173,31 @@ forecast_mfvar <- function(q_train_adj, baro_train, transforms, n_lags, horizon_
 forecast_midas_series <- function(y_series, train_rows, x_train_full, x_future_full, horizon, include_trend) {
   # Extract training portion of y series
   y_train <- stats::window(y_series, end = stats::time(y_series)[train_rows])
+  
+  # Check if we have enough data
+  if (length(y_train) < 3) {
+    warning(sprintf("MIDAS: Insufficient y_train data (n=%d)", length(y_train)), call. = FALSE)
+    return(rep(NA_real_, horizon))
+  }
+  if (length(x_train_full) < 6) {
+    warning(sprintf("MIDAS: Insufficient x_train data (n=%d)", length(x_train_full)), call. = FALSE)
+    return(rep(NA_real_, horizon))
+  }
+  if (length(x_future_full) != horizon * 3) {
+    warning(sprintf("MIDAS: x_future_full length mismatch (expected %d, got %d)", 
+                   horizon * 3, length(x_future_full)), call. = FALSE)
+    return(rep(NA_real_, horizon))
+  }
+  
   trend_train <- seq_len(length(y_train))
   
-  # Use data list approach (required for midasr::forecast to work) with AR(2)
+  # Use data list approach (required for midasr::forecast to work) with AR(1)
   data_list <- list(y = y_train, x = x_train_full)
-  formula_obj <- stats::as.formula("y ~ mls(y, k = 1:2, m = 1) + fmls(x, k = 2, m = 3)")
+  formula_obj <- stats::as.formula("y ~ mls(y, k = 1, m = 1) + fmls(x, k = 2, m = 3)")
 
   if (isTRUE(include_trend)) {
     data_list$trend <- trend_train
-    formula_obj <- stats::as.formula("y ~ trend + mls(y, k = 1:2, m = 1) + fmls(x, k = 2, m = 3)")
+    formula_obj <- stats::as.formula("y ~ trend + mls(y, k = 1, m = 1) + fmls(x, k = 2, m = 3)")
   }
 
   fit <- try(
@@ -190,7 +206,7 @@ forecast_midas_series <- function(y_series, train_rows, x_train_full, x_future_f
   )
 
   if (inherits(fit, "try-error")) {
-    message(sprintf("MIDAS fit error: %s", as.character(fit)))
+    warning(sprintf("MIDAS fit error: %s", as.character(fit)), call. = FALSE)
     return(rep(NA_real_, horizon))
   }
 
@@ -207,11 +223,18 @@ forecast_midas_series <- function(y_series, train_rows, x_train_full, x_future_f
   )
 
   if (inherits(fc, "try-error")) {
-    message(sprintf("MIDAS forecast error: %s", as.character(fc)))
+    warning(sprintf("MIDAS forecast error: %s", as.character(fc)), call. = FALSE)
     return(rep(NA_real_, horizon))
   }
 
-  as.numeric(fc$mean)
+  result <- as.numeric(fc$mean)
+  if (length(result) != horizon) {
+    warning(sprintf("MIDAS forecast length mismatch (expected %d, got %d)", 
+                   horizon, length(result)), call. = FALSE)
+    return(rep(NA_real_, horizon))
+  }
+  
+  result
 }
 
 summarise_metrics <- function(tbl) {
@@ -319,8 +342,12 @@ run_benchmark_cross_validation <- function(
   show_fold_progress <- isTRUE(progress)
   cores_available <- parallel::detectCores(logical = TRUE)
   default_workers <- if (is.null(cores_available) || !is.finite(cores_available)) 1L else max(1L, cores_available - 1L)
-  desired_workers <- getOption("mfvar.cv_workers", default_workers)
-  if (!is.numeric(desired_workers) || !is.finite(desired_workers)) desired_workers <- default_workers
+  
+  # Force single-threaded execution to avoid parallel variable scoping issues with MIDAS
+  # (midasr package functions and closures don't export properly to workers)
+  desired_workers <- 1L  # Force single-threaded until parallel globals properly configured
+  
+  if (!is.numeric(desired_workers) || !is.finite(desired_workers)) desired_workers <- 1L
   desired_workers <- as.integer(desired_workers)
   desired_workers <- max(1L, min(desired_workers, total_folds))
   use_parallel <- total_folds > 1L && desired_workers > 1L
@@ -456,6 +483,9 @@ run_benchmark_cross_validation <- function(
           horizon = horizon_max,
           include_trend = TRUE
         )
+        if (all(is.na(preds))) {
+          warning(sprintf("MIDAS (trend) for %s returned all NAs at fold %s", var, cutoff_label))
+        }
         tibble::tibble(variable = var, step_ahead = horizon_steps, prediction = preds, model = "MIDAS (trend)")
       })
 
@@ -468,6 +498,9 @@ run_benchmark_cross_validation <- function(
           horizon = horizon_max,
           include_trend = FALSE
         )
+        if (all(is.na(preds))) {
+          warning(sprintf("MIDAS (no trend) for %s returned all NAs at fold %s", var, cutoff_label))
+        }
         tibble::tibble(variable = var, step_ahead = horizon_steps, prediction = preds, model = "MIDAS")
       })
 
@@ -507,7 +540,8 @@ run_benchmark_cross_validation <- function(
       future.apply::future_lapply(
         seq_along(cv_indices),
         function(pos) run_single_fold(pos, progress_callback = callback),
-        future.seed = TRUE
+        future.seed = TRUE,
+        future.globals = TRUE  # Auto-detect all needed globals
       )
     } else {
       lapply(
