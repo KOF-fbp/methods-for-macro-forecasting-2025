@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 
-# Main entry point for Swiss Macro Forecasting Pipeline
+# Main entry point for Swiss Macroeconomic Forecasting Pipeline
 # ========================================================
 # 
 # This script provides a unified interface to run different workflows:

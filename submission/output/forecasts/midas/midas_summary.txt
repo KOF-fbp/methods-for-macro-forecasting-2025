@@ -137,12 +137,5 @@ Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’
 
  Residual standard error: 0.01973 on 122 degrees of freedom
 
-==== Forecast Evaluation ====
-
-# A tibble: 4 × 5
-  model        horizon       rmse   mae n_obs
-  <chr>        <chr>        <dbl> <dbl> <int>
-1 midas_simple 1-step ahead  1.01 0.632     3
-2 midas_simple 1-year ahead  2.93 1.74      3
-3 midas_trend  1-step ahead  1.22 0.723     3
-4 midas_trend  1-year ahead  2.72 1.60      3
+==== Note ====
+For model evaluation and benchmarking, see run_benchmarks.R

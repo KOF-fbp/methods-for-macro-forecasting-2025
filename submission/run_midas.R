@@ -23,9 +23,11 @@ activate_project()
 required_midas <- c(required_pkgs, "midasr", "forecast")
 load_required_packages(required_midas)
 
+start_time <- Sys.time()
+
 # --- Configuration -----------------------------------------------------------
 DATA_DIR <- file.path(".", "data")
-OUT_DIR  <- file.path(".", "output", "forecasts")
+OUT_DIR  <- file.path(".", "output", "forecasts", "midas")
 if (!dir.exists(OUT_DIR)) dir.create(OUT_DIR, recursive = TRUE)
 
 n_lags <- 5  # For consistency with MF-VAR
@@ -188,6 +190,88 @@ forecast_targets <- forecast_df |>
 readr::write_csv(forecast_df, file.path(OUT_DIR, "midas_forecasts_full.csv"))
 readr::write_csv(forecast_targets, file.path(OUT_DIR, "midas_forecasts_targets.csv"))
 
+# --- Plots -------------------------------------------------------------------
+PLOT_DIR <- file.path(OUT_DIR, "plots")
+if (!dir.exists(PLOT_DIR)) dir.create(PLOT_DIR, recursive = TRUE)
+
+plot_paths <- list()
+
+for (var in target_vars) {
+  var_data <- forecast_df |>
+    dplyr::filter(variable == var)
+  
+  if (!nrow(var_data)) next
+  
+  # Prepare historical data (from 2023 onwards for context)
+  hist_subset <- qdat_orig |>
+    dplyr::filter(.data$qtr >= zoo::as.yearqtr("2023 Q1"))
+  
+  hist_df <- tibble::tibble(
+    time = zoo::as.Date(hist_subset$qtr, frac = 1),
+    value = if (var == "exch_rate") exp(hist_subset[[var]]) else hist_subset[[var]]
+  )
+  
+  last_actual <- max(hist_df$time)
+  forecast_subset <- var_data |>
+    dplyr::mutate(
+      time = quarter_end,
+      midas_trend = if (var == "exch_rate") exp(midas_trend) else midas_trend,
+      midas_simple = if (var == "exch_rate") exp(midas_simple) else midas_simple
+    )
+  
+  # Create anchor point to join history with forecasts
+  first_fc_date <- min(forecast_subset$time)
+  if (first_fc_date > last_actual) {
+    last_value <- tail(hist_df$value, 1)
+    anchor <- tibble::tibble(
+      time = last_actual,
+      midas_trend = last_value,
+      midas_simple = last_value
+    )
+    forecast_subset <- dplyr::bind_rows(anchor, forecast_subset) |>
+      dplyr::arrange(time)
+  }
+  
+  # Determine variable-specific labels
+  var_labels <- list(
+    gdp_growth = list(title = "GDP growth: history and MIDAS forecasts", ylab = "Annualised percentage"),
+    inflation = list(title = "Inflation: history and MIDAS forecasts", ylab = "Annualised percentage"),
+    exch_rate = list(title = "Exchange rate: history and MIDAS forecasts", ylab = "CHF per EUR")
+  )
+  
+  p <- ggplot2::ggplot() +
+    ggplot2::geom_line(data = hist_df, ggplot2::aes(x = time, y = value), colour = "#4c4c4c") +
+    ggplot2::geom_vline(xintercept = last_actual, linetype = "dotted", colour = "#4c4c4c") +
+    ggplot2::geom_line(
+      data = forecast_subset,
+      ggplot2::aes(x = time, y = midas_trend, colour = "MIDAS (with trend)"),
+      linewidth = 1
+    ) +
+    ggplot2::geom_line(
+      data = forecast_subset,
+      ggplot2::aes(x = time, y = midas_simple, colour = "MIDAS (simple)"),
+      linewidth = 1,
+      linetype = "dashed"
+    ) +
+    ggplot2::scale_x_date(labels = function(x) format(zoo::as.yearqtr(x), "%Y Q%q")) +
+    ggplot2::scale_colour_manual(
+      name = NULL,
+      values = c("MIDAS (with trend)" = "#7570b3", "MIDAS (simple)" = "#e7298a")
+    ) +
+    ggplot2::labs(
+      title = var_labels[[var]]$title,
+      subtitle = "Comparison of MIDAS specifications",
+      x = "Quarter",
+      y = var_labels[[var]]$ylab
+    ) +
+    ggplot2::theme_minimal(base_size = 12) +
+    ggplot2::theme(legend.position = "top")
+  
+  plot_path <- file.path(PLOT_DIR, sprintf("midas_forecast_%s_context.png", var))
+  ggplot2::ggsave(plot_path, p, width = 8, height = 4.5, dpi = 120)
+  plot_paths[[var]] <- plot_path
+}
+
 # --- Summary Output ----------------------------------------------------------
 summary_path <- file.path(OUT_DIR, "midas_summary.txt")
 sink(summary_path)
@@ -223,9 +307,19 @@ sink()
 # --- Completion Message ------------------------------------------------------
 message_lines <- c(
   "\nMIDAS pipeline complete. Wrote:\n",
-  "  - output/forecasts/midas_forecasts_full.csv\n",
-  "  - output/forecasts/midas_forecasts_targets.csv\n",
-  "  - output/forecasts/midas_summary.txt\n"
+  "  - output/forecasts/midas/midas_forecasts_full.csv\n",
+  "  - output/forecasts/midas/midas_forecasts_targets.csv\n",
+  "  - output/forecasts/midas/midas_summary.txt\n"
+)
+
+for (var in names(plot_paths)) {
+  message_lines <- c(message_lines, sprintf("  - output/forecasts/midas/plots/midas_forecast_%s_context.png\n", var))
+}
+
+elapsed_time <- difftime(Sys.time(), start_time, units = "secs")
+message_lines <- c(
+  message_lines,
+  sprintf("\nCompleted in %.1f seconds (%.1f minutes)", elapsed_time, elapsed_time / 60)
 )
 
 message(paste0(message_lines, collapse = ""))

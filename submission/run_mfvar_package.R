@@ -15,6 +15,8 @@ source(file.path("R", "latent_states.R"))
 activate_project()
 load_required_packages(required_pkgs)
 
+start_time <- Sys.time()
+
 variable <- step_ahead <- horizon <- lower <- median <- upper <- NULL
 
 if (identical(Sys.getenv("MFVAR_VERSION"), "manual")) {
@@ -28,7 +30,7 @@ if (identical(Sys.getenv("MFVAR_VERSION"), "manual")) {
 
 # --- I/O paths ---------------------------------------------------------------
 DATA_DIR <- file.path(".", "data")
-OUT_DIR  <- file.path(".", "output", "forecasts")
+OUT_DIR  <- file.path(".", "output", "forecasts", "mfvar")
 CSV_DIR  <- file.path(OUT_DIR, "csv")
 PLOT_DIR <- file.path(OUT_DIR, "plots")
 MODEL_DIR <- file.path(OUT_DIR, "models")
@@ -264,34 +266,40 @@ saveRDS(mod_ss, file.path(MODEL_DIR, "mfvar_model_ss.rds"))
 # --- Completion message -----------------------------------------------------
 message_lines <- c(
   "Done. Wrote:\n",
-  "  - output/forecasts/mfvar_summary.txt\n",
-  "  - output/forecasts/csv/mfvar_forecasts_full.csv\n",
-  "  - output/forecasts/csv/mfvar_forecasts_targets.csv\n"
+  "  - output/forecasts/mfvar/mfvar_summary.txt\n",
+  "  - output/forecasts/mfvar/csv/mfvar_forecasts_full.csv\n",
+  "  - output/forecasts/mfvar/csv/mfvar_forecasts_targets.csv\n"
 )
 
 if (!is.null(gdp_context_path)) {
-  message_lines <- c(message_lines, "  - output/forecasts/plots/forecast_gdp_growth_context.png\n")
+  message_lines <- c(message_lines, "  - output/forecasts/mfvar/plots/forecast_gdp_growth_context.png\n")
 }
 if (!is.null(inflation_context_path)) {
-  message_lines <- c(message_lines, "  - output/forecasts/plots/forecast_inflation_context.png\n")
+  message_lines <- c(message_lines, "  - output/forecasts/mfvar/plots/forecast_inflation_context.png\n")
 }
 if (!is.null(exch_context_path)) {
-  message_lines <- c(message_lines, "  - output/forecasts/plots/forecast_exchange_rate_context.png\n")
+  message_lines <- c(message_lines, "  - output/forecasts/mfvar/plots/forecast_exchange_rate_context.png\n")
 }
 
 if (!is.null(latent_states_path)) {
-  message_lines <- c(message_lines, "  - output/forecasts/csv/mfvar_latent_states.csv\n")
+  message_lines <- c(message_lines, "  - output/forecasts/mfvar/csv/mfvar_latent_states.csv\n")
 }
 if (!is.null(latent_states_plot)) {
-  message_lines <- c(message_lines, "  - output/forecasts/plots/mfvar_latent_states_timeseries.png\n")
+  message_lines <- c(message_lines, "  - output/forecasts/mfvar/plots/mfvar_latent_states_timeseries.png\n")
 }
 if (!is.null(latent_heatmap_plot)) {
-  message_lines <- c(message_lines, "  - output/forecasts/plots/mfvar_latent_states_heatmap.png\n")
+  message_lines <- c(message_lines, "  - output/forecasts/mfvar/plots/mfvar_latent_states_heatmap.png\n")
 }
 
 message_lines <- c(
   message_lines,
-  "  - output/forecasts/models/mfvar_model_ss.rds"
+  "  - output/forecasts/mfvar/models/mfvar_model_ss.rds"
+)
+
+elapsed_time <- difftime(Sys.time(), start_time, units = "secs")
+message_lines <- c(
+  message_lines,
+  sprintf("\n\nCompleted in %.1f seconds (%.1f minutes)", elapsed_time, elapsed_time / 60)
 )
 
 message(paste0(message_lines, collapse = ""))
