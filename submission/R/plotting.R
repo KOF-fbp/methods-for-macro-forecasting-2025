@@ -172,3 +172,116 @@ plot_exch_rate_forecasts_with_history <- function(fc_exch, ar_exch, qdat, out_di
     file_name = "forecast_exchange_rate_context.png"
   )
 }
+
+plot_combined_forecasts <- function(mfvar_df, midas_df, ar_df, history_df, out_dir, title, y_label, file_name) {
+  # Plot all models together: MF-VAR (with bands), MIDAS (trend & simple), and AR(2)
+  stopifnot(nrow(mfvar_df) > 0, nrow(history_df) > 0)
+
+  hist_plot <- history_df |>
+    dplyr::mutate(time = as.Date(time)) |>
+    dplyr::filter(time >= as.Date("2023-01-01"))
+
+  mfvar_plot <- mfvar_df |>
+    dplyr::mutate(time = as.Date(time))
+
+  midas_plot <- midas_df |>
+    dplyr::mutate(time = as.Date(time))
+
+  ar_plot <- ar_df |>
+    dplyr::mutate(time = as.Date(time)) |>
+    dplyr::filter(time <= max(mfvar_plot$time, midas_plot$time))
+
+  last_actual <- max(hist_plot$time)
+  last_value <- hist_plot$value[match(last_actual, hist_plot$time)]
+
+  # Anchor all forecast series to last observation
+  first_mfvar <- min(mfvar_plot$time)
+  if (first_mfvar > last_actual) {
+    anchor_mfvar <- tibble::tibble(
+      time = last_actual,
+      lower = last_value,
+      median = last_value,
+      upper = last_value
+    )
+    mfvar_plot <- dplyr::bind_rows(anchor_mfvar, mfvar_plot) |>
+      dplyr::arrange(time)
+  }
+
+  first_midas <- min(midas_plot$time)
+  if (first_midas > last_actual) {
+    anchor_midas <- tibble::tibble(
+      time = last_actual,
+      midas_trend = last_value,
+      midas_simple = last_value
+    )
+    midas_plot <- dplyr::bind_rows(anchor_midas, midas_plot) |>
+      dplyr::arrange(time)
+  }
+
+  if (nrow(ar_plot) > 0 && min(ar_plot$time) > last_actual) {
+    ar_plot <- dplyr::bind_rows(
+      tibble::tibble(time = last_actual, ar2 = last_value),
+      ar_plot
+    ) |>
+      dplyr::arrange(time)
+  }
+
+  p <- ggplot2::ggplot(hist_plot, ggplot2::aes(x = time, y = value)) +
+    ggplot2::geom_line(colour = "#4c4c4c") +
+    ggplot2::geom_vline(xintercept = last_actual, linetype = "dotted", colour = "#4c4c4c") +
+    ggplot2::geom_ribbon(
+      data = mfvar_plot,
+      mapping = ggplot2::aes(x = time, ymin = lower, ymax = upper, fill = "MF-VAR"),
+      alpha = 0.15,
+      inherit.aes = FALSE
+    ) +
+    ggplot2::geom_line(
+      data = mfvar_plot,
+      mapping = ggplot2::aes(x = time, y = median, colour = "MF-VAR"),
+      linewidth = 1,
+      inherit.aes = FALSE
+    ) +
+    ggplot2::geom_line(
+      data = midas_plot,
+      mapping = ggplot2::aes(x = time, y = midas_trend, colour = "MIDAS (trend)"),
+      linewidth = 1,
+      inherit.aes = FALSE
+    ) +
+    ggplot2::geom_line(
+      data = midas_plot,
+      mapping = ggplot2::aes(x = time, y = midas_simple, colour = "MIDAS (simple)"),
+      linewidth = 1,
+      linetype = "dashed",
+      inherit.aes = FALSE
+    ) +
+    ggplot2::geom_line(
+      data = ar_plot,
+      mapping = ggplot2::aes(x = time, y = ar2, colour = "AR(2)"),
+      linewidth = 0.8,
+      linetype = "dotted",
+      inherit.aes = FALSE
+    ) +
+    ggplot2::scale_x_date(labels = function(x) format(zoo::as.yearqtr(x), "%Y Q%q")) +
+    ggplot2::scale_colour_manual(
+      name = NULL,
+      values = c(
+        "MF-VAR" = "#1b9e77",
+        "MIDAS (trend)" = "#7570b3",
+        "MIDAS (simple)" = "#e7298a",
+        "AR(2)" = "#d95f02"
+      )
+    ) +
+    ggplot2::scale_fill_manual(name = NULL, values = c("MF-VAR" = "#1b9e77")) +
+    ggplot2::labs(
+      title = title,
+      subtitle = "All model forecasts with historical data",
+      x = "Quarter",
+      y = y_label
+    ) +
+    ggplot2::theme_minimal(base_size = 12) +
+    ggplot2::theme(legend.position = "top")
+
+  out_path <- file.path(out_dir, file_name)
+  ggplot2::ggsave(out_path, p, width = 10, height = 5, dpi = 120)
+  out_path
+}

@@ -1,8 +1,8 @@
 
 ==== MIDAS Regression Summary ====
 
-Training sample: 130 quarters
-Forecast horizon: 4 quarters
+Training sample: 134 quarters
+Forecast horizon: 4 quarters ahead (1 year)
 Target variables: gdp_growth, inflation, exch_rate
 
 ==== Model Specifications ====
@@ -13,129 +13,129 @@ Target variables: gdp_growth, inflation, exch_rate
 MIDAS with trend:
 
 MIDAS regression model with "ts" data:
-Start = 1992(4), End = 2024(3)
+Start = 1992(4), End = 2025(3)
 
  Formula y ~ trend + mls(y, k = 1:2, m = 1) + fmls(x, k = 2, m = 3) 
 
  Parameters:
              Estimate Std. Error t value Pr(>|t|)    
-(Intercept)  2.520577   0.781564   3.225 0.001620 ** 
-trend       -0.006065   0.007580  -0.800 0.425187    
-y1          -0.027168   0.118649  -0.229 0.819271    
-y2           0.023549   0.061406   0.383 0.702024    
-x1          -0.329596   0.075115  -4.388 2.46e-05 ***
-x2           0.067886   0.086104   0.788 0.431994    
-x3           0.579692   0.163369   3.548 0.000553 ***
+(Intercept)  2.570894   0.780284   3.295 0.001282 ** 
+trend       -0.007206   0.007045  -1.023 0.308349    
+y1          -0.025955   0.123875  -0.210 0.834379    
+y2           0.018824   0.064539   0.292 0.771019    
+x1          -0.335631   0.074641  -4.497 1.56e-05 ***
+x2           0.069510   0.084563   0.822 0.412644    
+x3           0.558321   0.159922   3.491 0.000665 ***
 ---
 Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
 
- Residual standard error: 3.26 on 121 degrees of freedom
+ Residual standard error: 3.243 on 125 degrees of freedom
 
 MIDAS without trend:
 
 MIDAS regression model with "ts" data:
-Start = 1992(4), End = 2024(3)
+Start = 1992(4), End = 2025(3)
 
  Formula y ~ mls(y, k = 1:2, m = 1) + fmls(x, k = 2, m = 3) 
 
  Parameters:
             Estimate Std. Error t value Pr(>|t|)    
-(Intercept)  2.11270    0.43879   4.815 4.27e-06 ***
-y1          -0.02506    0.13121  -0.191  0.84887    
-y2           0.02332    0.06060   0.385  0.70102    
-x1          -0.33300    0.06116  -5.444 2.74e-07 ***
-x2           0.07426    0.07444   0.998  0.32049    
-x3           0.57713    0.17324   3.331  0.00114 ** 
+(Intercept)  2.07019    0.44251   4.678 7.34e-06 ***
+y1          -0.02266    0.13563  -0.167  0.86757    
+y2           0.01876    0.06240   0.301  0.76422    
+x1          -0.33886    0.05873  -5.770 5.81e-08 ***
+x2           0.07811    0.07370   1.060  0.29126    
+x3           0.55603    0.16980   3.275  0.00137 ** 
 ---
 Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
 
- Residual standard error: 3.255 on 122 degrees of freedom
+ Residual standard error: 3.243 on 126 degrees of freedom
 
 --- inflation ---
 
 MIDAS with trend:
 
 MIDAS regression model with "ts" data:
-Start = 1992(4), End = 2024(3)
+Start = 1992(4), End = 2025(3)
 
  Formula y ~ trend + mls(y, k = 1:2, m = 1) + fmls(x, k = 2, m = 3) 
 
  Parameters:
              Estimate Std. Error t value Pr(>|t|)    
-(Intercept)  0.381062   0.194768   1.956   0.0527 .  
-trend       -0.001741   0.002465  -0.706   0.4815    
-y1           0.533543   0.102999   5.180 8.97e-07 ***
-y2           0.115026   0.109139   1.054   0.2940    
-x1          -0.017311   0.020121  -0.860   0.3913    
-x2           0.021207   0.031467   0.674   0.5016    
-x3           0.073066   0.033245   2.198   0.0299 *  
+(Intercept)  0.382391   0.190487   2.007   0.0469 *  
+trend       -0.001761   0.002261  -0.779   0.4375    
+y1           0.533312   0.100799   5.291 5.27e-07 ***
+y2           0.114483   0.107116   1.069   0.2872    
+x1          -0.017309   0.019487  -0.888   0.3761    
+x2           0.020798   0.030991   0.671   0.5034    
+x3           0.072188   0.031739   2.274   0.0246 *  
 ---
 Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
 
- Residual standard error: 1.082 on 121 degrees of freedom
+ Residual standard error: 1.065 on 125 degrees of freedom
 
 MIDAS without trend:
 
 MIDAS regression model with "ts" data:
-Start = 1992(4), End = 2024(3)
+Start = 1992(4), End = 2025(3)
 
  Formula y ~ mls(y, k = 1:2, m = 1) + fmls(x, k = 2, m = 3) 
 
  Parameters:
             Estimate Std. Error t value Pr(>|t|)    
-(Intercept)  0.25645    0.09795   2.618  0.00996 ** 
-y1           0.53817    0.10304   5.223 7.36e-07 ***
-y2           0.12180    0.10693   1.139  0.25691    
-x1          -0.01806    0.01980  -0.912  0.36366    
-x2           0.02332    0.03170   0.736  0.46330    
-x3           0.07299    0.03315   2.202  0.02956 *  
+(Intercept)  0.25188    0.09318   2.703  0.00782 ** 
+y1           0.53969    0.10001   5.396 3.25e-07 ***
+y2           0.12123    0.10529   1.151  0.25175    
+x1          -0.01785    0.01921  -0.929  0.35450    
+x2           0.02324    0.03104   0.749  0.45542    
+x3           0.07237    0.03164   2.287  0.02386 *  
 ---
 Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
 
- Residual standard error: 1.079 on 122 degrees of freedom
+ Residual standard error: 1.063 on 126 degrees of freedom
 
 --- exch_rate ---
 
 MIDAS with trend:
 
 MIDAS regression model with "ts" data:
-Start = 1992(4), End = 2024(3)
+Start = 1992(4), End = 2025(3)
 
  Formula y ~ trend + mls(y, k = 1:2, m = 1) + fmls(x, k = 2, m = 3) 
 
  Parameters:
               Estimate Std. Error t value Pr(>|t|)    
-(Intercept)  0.0198425  0.0169843   1.168 0.244988    
-trend       -0.0001852  0.0001307  -1.417 0.158955    
-y1           1.1384116  0.0983655  11.573  < 2e-16 ***
-y2          -0.1759807  0.0983024  -1.790 0.075923 .  
-x1           0.0003263  0.0004838   0.674 0.501289    
-x2           0.0020758  0.0007835   2.650 0.009136 ** 
-x3           0.0019103  0.0004916   3.886 0.000167 ***
+(Intercept)  0.0201320  0.0167944   1.199  0.23290    
+trend       -0.0001857  0.0001308  -1.420  0.15823    
+y1           1.1358043  0.0952038  11.930  < 2e-16 ***
+y2          -0.1740540  0.0948911  -1.834  0.06900 .  
+x1           0.0003189  0.0004829   0.660  0.51020    
+x2           0.0020832  0.0007711   2.702  0.00786 ** 
+x3           0.0019243  0.0004781   4.025 9.81e-05 ***
 ---
 Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
 
- Residual standard error: 0.01963 on 121 degrees of freedom
+ Residual standard error: 0.01933 on 125 degrees of freedom
 
 MIDAS without trend:
 
 MIDAS regression model with "ts" data:
-Start = 1992(4), End = 2024(3)
+Start = 1992(4), End = 2025(3)
 
  Formula y ~ mls(y, k = 1:2, m = 1) + fmls(x, k = 2, m = 3) 
 
  Parameters:
               Estimate Std. Error t value Pr(>|t|)    
-(Intercept) -0.0030605  0.0032499  -0.942 0.348202    
-y1           1.1573745  0.0979331  11.818  < 2e-16 ***
-y2          -0.1604497  0.0997093  -1.609 0.110163    
-x1           0.0003328  0.0004763   0.699 0.486011    
-x2           0.0021812  0.0007973   2.736 0.007154 ** 
-x3           0.0019369  0.0005007   3.869 0.000177 ***
+(Intercept) -0.0027921  0.0028171  -0.991 0.323529    
+y1           1.1546752  0.0944364  12.227  < 2e-16 ***
+y2          -0.1584399  0.0959778  -1.651 0.101271    
+x1           0.0003249  0.0004749   0.684 0.495113    
+x2           0.0021883  0.0007860   2.784 0.006195 ** 
+x3           0.0019510  0.0004872   4.004 0.000106 ***
 ---
 Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
 
- Residual standard error: 0.01973 on 122 degrees of freedom
+ Residual standard error: 0.01943 on 126 degrees of freedom
 
 ==== Note ====
 For model evaluation and benchmarking, see run_benchmarks.R

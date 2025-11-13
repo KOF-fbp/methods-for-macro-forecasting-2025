@@ -40,6 +40,10 @@ Available workflows:
                Includes holdout evaluation and cross-validation.
                Output: output/model_benchmark_*.csv, comparison plots
                
+  combined   - Generate combined forecast plots (all models overlaid)
+               Requires MF-VAR and MIDAS forecasts to be generated first.
+               Output: output/forecasts/combined/*.png
+               
   verify     - Environment verification (for Docker/CI)
                Quick smoke test to validate package installation and data access.
                Output: Basic diagnostic messages only
@@ -164,12 +168,29 @@ run_benchmark <- function() {
   })
 }
 
+run_combined_plots <- function() {
+  cat("\n=== Generating Combined Forecast Plots ===\n\n")
+  cat("Creating overlay plots with all model forecasts...\n")
+  cat("This requires MF-VAR and MIDAS forecasts to exist.\n\n")
+  
+  tryCatch({
+    source("run_combined_plots.R", local = new.env())
+    cat("\n✓ Combined plots completed successfully!\n")
+    cat("Check output/forecasts/combined/ directory for results.\n\n")
+  }, error = function(e) {
+    cat("\n✗ Combined plots generation failed:\n")
+    cat(conditionMessage(e), "\n")
+    quit(save = "no", status = 1)
+  })
+}
+
 # Route to appropriate workflow
 switch(tolower(workflow),
   "mfvar" = run_mfvar(),
   "midas" = run_midas(),
   "benchmarks" = run_benchmark(),
   "benchmark" = run_benchmark(),  # alias for backwards compatibility
+  "combined" = run_combined_plots(),
   "verify" = verify_environment(),
   "help" = show_help(),
   "-h" = show_help(),

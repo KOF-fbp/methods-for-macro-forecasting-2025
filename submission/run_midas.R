@@ -28,7 +28,12 @@ start_time <- Sys.time()
 # --- Configuration -----------------------------------------------------------
 DATA_DIR <- file.path(".", "data")
 OUT_DIR  <- file.path(".", "output", "forecasts", "midas")
-if (!dir.exists(OUT_DIR)) dir.create(OUT_DIR, recursive = TRUE)
+CSV_DIR  <- file.path(OUT_DIR, "csv")
+PLOT_DIR <- file.path(OUT_DIR, "plots")
+MODEL_DIR <- file.path(OUT_DIR, "models")
+for (dir in c(OUT_DIR, CSV_DIR, PLOT_DIR, MODEL_DIR)) {
+  if (!dir.exists(dir)) dir.create(dir, recursive = TRUE)
+}
 
 n_lags <- 5  # For consistency with MF-VAR
 forecast_horizons <- c(1L, 4L)  # 1-step and 1-year ahead
@@ -70,36 +75,74 @@ names(y_ts_list) <- target_vars
 message("Estimating MIDAS models...")
 
 n_obs <- nrow(qdat_orig)
-train_size <- n_obs - max(forecast_horizons)
 
-if (train_size <= n_lags) {
-  stop("Insufficient data for MIDAS estimation with requested horizons.")
-}
+# Use full sample for training (no holdout - we want newest forecasts)
+train_size <- n_obs
 
+# Get the end month for the full quarterly data
 train_end_qtr <- qdat_orig$qtr[train_size]
 train_end_month <- c(lubridate::year(zoo::as.Date(train_end_qtr, frac = 1)),
                      lubridate::quarter(zoo::as.Date(train_end_qtr, frac = 1)) * 3)
 
-test_start_month <- c(lubridate::year(zoo::as.Date(train_end_qtr, frac = 1)),
-                      (lubridate::quarter(zoo::as.Date(train_end_qtr, frac = 1))) * 3 + 1)
-test_end_month <- c(lubridate::year(zoo::as.Date(qdat_orig$qtr[n_obs], frac = 1)),
-                    lubridate::quarter(zoo::as.Date(qdat_orig$qtr[n_obs], frac = 1)) * 3)
-
+# Use all available monthly data up to the last complete quarter
 x_train <- stats::window(baro_diff, end = train_end_month)
-x_test <- stats::window(baro_diff, start = test_start_month, end = test_end_month)
+
+# For forecasting, we need future monthly values
+# MIDAS forecast requires monthly data for the forecast horizon
+# Since we forecast 4 quarters ahead (1 year), we need 4*3 = 12 months of monthly data
+# Check if we have that available, otherwise use last value as naive forecast
+forecast_quarters <- 4
+forecast_months_needed <- forecast_quarters * 3
+
+last_month <- train_end_month
+new_x_start <- c(last_month[1], last_month[2] + 1)
+if (new_x_start[2] > 12) {
+  new_x_start[1] <- new_x_start[1] + (new_x_start[2] - 1) %/% 12
+  new_x_start[2] <- ((new_x_start[2] - 1) %% 12) + 1
+}
+
+# Calculate end month for forecast horizon
+years_ahead <- (new_x_start[2] + forecast_months_needed - 1) %/% 12
+months_ahead <- ((new_x_start[2] + forecast_months_needed - 1) %% 12) + 1
+new_x_end <- c(new_x_start[1] + years_ahead, months_ahead)
+
+# Check what monthly data is actually available
+x_available_end <- stats::end(baro_diff)
+months_available <- (x_available_end[1] - new_x_start[1]) * 12 + (x_available_end[2] - new_x_start[2]) + 1
+
+if (months_available >= forecast_months_needed) {
+  # We have enough future monthly data
+  x_new <- stats::window(baro_diff, start = new_x_start, end = new_x_end)
+} else if (months_available > 0) {
+  # We have some future data, but not enough - extend with last value
+  x_partial <- stats::window(baro_diff, start = new_x_start, end = x_available_end)
+  last_val <- tail(as.numeric(x_partial), 1)
+  n_missing <- forecast_months_needed - months_available
+  
+  # Create full series with available + extended
+  x_full <- c(as.numeric(x_partial), rep(last_val, n_missing))
+  x_new <- stats::ts(x_full, start = new_x_start, frequency = 12)
+} else {
+  # No future monthly data - use last training value
+  last_val <- tail(as.numeric(baro_diff), 1)
+  x_new <- stats::ts(rep(last_val, forecast_months_needed), start = new_x_start, frequency = 12)
+}
 
 # Fit MIDAS models for each target variable
+n_forecast_quarters <- 12
 results <- list()
 
 for (var in target_vars) {
   message(sprintf("  • Fitting MIDAS for %s...", var))
   
   y_series <- y_ts_list[[var]]
-  y_train <- stats::window(y_series, end = stats::time(y_series)[train_size])
-  y_test <- stats::window(y_series, start = stats::time(y_series)[train_size + 1])
+  y_train <- y_series  # Use full series
   
   trend_train <- seq_len(length(y_train))
-  trend_test <- (length(y_train) + 1):(length(y_train) + length(y_test))
+  
+  # Future trend values for forecasting
+  n_forecast_quarters <- 4
+  trend_forecast <- (length(y_train) + 1):(length(y_train) + n_forecast_quarters)
   
   # MIDAS with trend - use data parameter pattern with AR(2)
   fit_trend <- tryCatch({
@@ -121,42 +164,45 @@ for (var in target_vars) {
     NULL
   })
   
-  # Generate forecasts - match variable names in newdata
+  # Generate forecasts
   fc_trend <- if (!is.null(fit_trend)) {
     tryCatch({
       midasr::forecast(fit_trend, 
-                      newdata = list(x = x_test, trend = trend_test),
-                      h = length(y_test),
+                      newdata = list(x = x_new, trend = trend_forecast),
+                      h = n_forecast_quarters,
                       method = "dynamic")$mean
     }, error = function(e) {
       warning(sprintf("MIDAS (trend) forecast failed for %s", var))
-      rep(NA_real_, length(y_test))
+      rep(NA_real_, n_forecast_quarters)
     })
   } else {
-    rep(NA_real_, length(y_test))
+    rep(NA_real_, n_forecast_quarters)
   }
   
   fc_simple <- if (!is.null(fit_simple)) {
     tryCatch({
       midasr::forecast(fit_simple,
-                      newdata = list(x = x_test),
-                      h = length(y_test),
+                      newdata = list(x = x_new),
+                      h = n_forecast_quarters,
                       method = "dynamic")$mean
     }, error = function(e) {
       warning(sprintf("MIDAS (simple) forecast failed for %s", var))
-      rep(NA_real_, length(y_test))
+      rep(NA_real_, n_forecast_quarters)
     })
   } else {
-    rep(NA_real_, length(y_test))
+    rep(NA_real_, n_forecast_quarters)
   }
+  
+  # Generate future quarter dates
+  last_qtr <- qdat_orig$qtr[n_obs]
+  forecast_quarters <- last_qtr + (1:n_forecast_quarters) / 4
   
   results[[var]] <- list(
     fit_trend = fit_trend,
     fit_simple = fit_simple,
     forecast_trend = fc_trend,
     forecast_simple = fc_simple,
-    actual = as.numeric(y_test),
-    forecast_quarters = qdat_orig$qtr[(train_size + 1):n_obs]
+    forecast_quarters = forecast_quarters
   )
 }
 
@@ -165,7 +211,7 @@ message("Generating output files...")
 
 forecast_df <- purrr::map_dfr(target_vars, function(var) {
   res <- results[[var]]
-  n_fc <- length(res$actual)
+  n_fc <- length(res$forecast_quarters)
   
   tibble::tibble(
     variable = var,
@@ -178,21 +224,18 @@ forecast_df <- purrr::map_dfr(target_vars, function(var) {
       TRUE ~ paste0(step_ahead, "-step ahead")
     ),
     midas_trend = res$forecast_trend,
-    midas_simple = res$forecast_simple,
-    actual = res$actual
+    midas_simple = res$forecast_simple
   )
 })
 
 forecast_targets <- forecast_df |>
   dplyr::filter(step_ahead %in% forecast_horizons) |>
-  dplyr::select(variable, horizon, quarter_end, midas_trend, midas_simple, actual)
+  dplyr::select(variable, horizon, quarter_end, midas_trend, midas_simple)
 
-readr::write_csv(forecast_df, file.path(OUT_DIR, "midas_forecasts_full.csv"))
-readr::write_csv(forecast_targets, file.path(OUT_DIR, "midas_forecasts_targets.csv"))
+readr::write_csv(forecast_df, file.path(CSV_DIR, "midas_forecasts_full.csv"))
+readr::write_csv(forecast_targets, file.path(CSV_DIR, "midas_forecasts_targets.csv"))
 
 # --- Plots -------------------------------------------------------------------
-PLOT_DIR <- file.path(OUT_DIR, "plots")
-if (!dir.exists(PLOT_DIR)) dir.create(PLOT_DIR, recursive = TRUE)
 
 plot_paths <- list()
 
@@ -272,13 +315,23 @@ for (var in target_vars) {
   plot_paths[[var]] <- plot_path
 }
 
+# --- Persist models ----------------------------------------------------------
+model_list <- lapply(target_vars, function(var) {
+  list(
+    fit_trend = results[[var]]$fit_trend,
+    fit_simple = results[[var]]$fit_simple
+  )
+})
+names(model_list) <- target_vars
+saveRDS(model_list, file.path(MODEL_DIR, "midas_models.rds"))
+
 # --- Summary Output ----------------------------------------------------------
 summary_path <- file.path(OUT_DIR, "midas_summary.txt")
 sink(summary_path)
 
 cat("\n==== MIDAS Regression Summary ====\n\n")
 cat(sprintf("Training sample: %d quarters\n", train_size))
-cat(sprintf("Forecast horizon: %d quarters\n", length(results[[1]]$actual)))
+cat(sprintf("Forecast horizon: %d quarters ahead (1 year)\n", 4))
 cat(sprintf("Target variables: %s\n", paste(target_vars, collapse = ", ")))
 
 cat("\n==== Model Specifications ====\n\n")
@@ -307,14 +360,19 @@ sink()
 # --- Completion Message ------------------------------------------------------
 message_lines <- c(
   "\nMIDAS pipeline complete. Wrote:\n",
-  "  - output/forecasts/midas/midas_forecasts_full.csv\n",
-  "  - output/forecasts/midas/midas_forecasts_targets.csv\n",
-  "  - output/forecasts/midas/midas_summary.txt\n"
+  "  - output/forecasts/midas/midas_summary.txt\n",
+  "  - output/forecasts/midas/csv/midas_forecasts_full.csv\n",
+  "  - output/forecasts/midas/csv/midas_forecasts_targets.csv\n"
 )
 
 for (var in names(plot_paths)) {
   message_lines <- c(message_lines, sprintf("  - output/forecasts/midas/plots/midas_forecast_%s_context.png\n", var))
 }
+
+message_lines <- c(
+  message_lines,
+  "  - output/forecasts/midas/models/midas_models.rds\n"
+)
 
 elapsed_time <- difftime(Sys.time(), start_time, units = "secs")
 message_lines <- c(

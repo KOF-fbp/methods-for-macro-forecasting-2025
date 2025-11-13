@@ -40,7 +40,7 @@ for (dir in c(OUT_DIR, CSV_DIR, PLOT_DIR, MODEL_DIR)) {
 
 # --- Data preparation -------------------------------------------------------
 # Pull the transformed quarterly series and align with monthly indicators sourced
-# from the combined SNB/KOF dataset. We keep only periods where every chosen
+# from the combined SNB dataset. We keep only periods where every chosen
 # monthly series is available.
 qdat_raw <- read_quarterly_data(DATA_DIR)
 monthly_variables <- c("plkopr", "devkum", "amarbma")
@@ -66,8 +66,8 @@ target_vars <- target_variables
 n_lags <- 5
 
 # --- Estimation and forecasting --------------------------------------------
-# Refit the MF-VAR on the full sample and produce 12 quarter-ahead forecasts
-# (sufficient to cover the 1-year horizon after aggregation).
+# Refit the MF-VAR on the full sample and produce 12 months of forecasts
+# (which aggregate into 4 quarters = 1-year horizon for quarterly variables).
 mod_ss <- estimate_mfvar_model(Y, n_lags, n_fcst = 12, seed = 123)
 
 latent_states_path <- NULL
@@ -98,12 +98,18 @@ fc <- fc |>
   dplyr::ungroup() |>
   dplyr::select(-step_ahead_tmp, -time_index)
 
+# Store last observation quarter for forecast date calculation
+last_obs_qtr <- tail(qdat_orig$qtr, 1)
+
+# Split forecasts into quarterly (limited to 4 steps) and monthly (all steps)
 fc_q <- fc |>
   dplyr::filter(variable %in% target_vars) |>
   dplyr::arrange(variable, time) |>
   dplyr::group_by(variable) |>
   dplyr::mutate(step_ahead = dplyr::row_number()) |>
   dplyr::ungroup() |>
+  # Keep only first 4 quarters to match MIDAS (1 year ahead)
+  dplyr::filter(step_ahead <= 4) |>
   dplyr::mutate(
     horizon = dplyr::case_when(
       step_ahead == 1 ~ "1-step ahead",
@@ -114,8 +120,17 @@ fc_q <- fc |>
     median = dplyr::if_else(variable == "exch_rate", exp(median), median),
     lower  = dplyr::if_else(variable == "exch_rate", exp(lower), lower),
     upper  = dplyr::if_else(variable == "exch_rate", exp(upper), upper),
-    quarter_end = zoo::as.Date(zoo::as.yearqtr(fcst_date), frac = 1)
-  )
+    # Calculate quarter_end from last observation quarter + step_ahead quarters
+    forecast_qtr = last_obs_qtr + (step_ahead / 4),
+    quarter_end = zoo::as.Date(forecast_qtr, frac = 1)
+  ) |>
+  dplyr::select(-forecast_qtr)
+
+fc_m <- fc |>
+  dplyr::filter(!variable %in% target_vars)
+
+# Combine for full forecast file (quarterly limited to 4 steps, monthly unlimited)
+fc_full <- dplyr::bind_rows(fc_q, fc_m)
 
 fc_targets <- fc_q |>
   dplyr::filter(!is.na(horizon)) |>
@@ -134,7 +149,7 @@ if (nrow(missing_targets)) {
 fc_targets <- fc_targets |>
   dplyr::select(variable, horizon, quarter_end, median, lower, upper)
 
-readr::write_csv(fc,         file.path(CSV_DIR, "mfvar_forecasts_full.csv"))
+readr::write_csv(fc_full,    file.path(CSV_DIR, "mfvar_forecasts_full.csv"))
 readr::write_csv(fc_targets, file.path(CSV_DIR, "mfvar_forecasts_targets.csv"))
 
 # --- Summaries --------------------------------------------------------------
