@@ -66,10 +66,6 @@ activate_project()
 
 all_pkgs <- unique(c(required_pkgs, "midasr", "forecast", "purrr", "future", "future.apply"))
 load_required_packages(all_pkgs)
-progress_available <- requireNamespace("progressr", quietly = TRUE)
-if (progress_available) {
-  progressr::handlers(global = TRUE, progressr::handler_txtprogressbar)
-}
 stage_status(status = "done")
 
 DATA_DIR <- file.path(".", "data")
@@ -382,6 +378,15 @@ table_to_markdown <- function(df, headers) {
   c(header_line, separator_line, body_lines, "")
 }
 
+measure_elapsed <- function(expr) {
+  expr_call <- substitute(expr)
+  parent_env <- parent.frame()
+  start <- proc.time()
+  result <- eval(expr_call, envir = parent_env)
+  elapsed <- (proc.time() - start)[["elapsed"]]
+  list(result = result, elapsed = elapsed)
+}
+
 run_benchmark_cross_validation <- function(
     qdat_adj,
     qdat_orig,
@@ -424,7 +429,8 @@ run_benchmark_cross_validation <- function(
       metrics_overall = tibble::tibble(),
       folds = tibble::tibble(),
       fold_count = 0L,
-      extra_values = extra_months_options
+      extra_values = extra_months_options,
+      timings = list(per_fold = tibble::tibble(), totals = numeric())
     ))
   }
 
@@ -444,7 +450,8 @@ run_benchmark_cross_validation <- function(
       metrics_overall = tibble::tibble(),
       folds = tibble::tibble(),
       fold_count = 0L,
-      extra_values = extra_months_options
+      extra_values = extra_months_options,
+      timings = list(per_fold = tibble::tibble(), totals = numeric())
     ))
   }
 
@@ -461,9 +468,7 @@ run_benchmark_cross_validation <- function(
   desired_workers <- max(1L, min(desired_workers, total_folds))
   use_parallel <- total_folds > 1L && desired_workers > 1L
 
-  progress_enabled <- show_fold_progress && isTRUE(progress_available)
-
-  if (use_parallel && show_fold_progress && !progress_enabled) {
+  if (use_parallel && show_fold_progress) {
     message(sprintf("  • Running %d CV folds using %d worker(s)...", total_folds, desired_workers))
   }
 
@@ -484,6 +489,12 @@ run_benchmark_cross_validation <- function(
       return(NULL)
     }
 
+    fold_timer_start <- proc.time()
+    mfvar_elapsed <- 0
+    midas_kof_elapsed <- 0
+    midas_latent_elapsed <- 0
+    ar_elapsed <- 0
+
     # Expanding window: always train from row 1 to train_rows
     # As idx increases, train_rows increases, expanding the training set
     q_train_adj <- dplyr::slice_head(qdat_adj, n = train_rows)
@@ -495,7 +506,7 @@ run_benchmark_cross_validation <- function(
     forecast_quarters <- q_eval_orig$qtr
     quarter_end_dates <- zoo::as.Date(forecast_quarters, frac = 1)
 
-    if (show_fold_progress && !use_parallel && !progress_enabled) {
+    if (show_fold_progress) {
       message(sprintf("  • CV fold %02d/%02d | training through %s", fold_pos, total_folds, cutoff_label))
     }
 
@@ -517,21 +528,25 @@ run_benchmark_cross_validation <- function(
 
     time_indices <- compute_time_index(train_rows, horizon_steps)
 
-    ar_base <- purrr::map_dfr(target_vars, function(var) {
-      preds_adj <- predict_ar2(q_train_adj[[var]], horizon_max, var_label = var, context = sprintf("CV fold ending %s", cutoff_label))
-      preds_orig <- restore_series_values(
-        preds_adj,
-        rep(var, horizon_max),
-        time_indices,
-        transforms
-      )
-      tibble::tibble(
-        variable = var,
-        step_ahead = horizon_steps,
-        prediction = preds_orig,
-        model = "AR(2)"
-      )
+    ar_eval <- measure_elapsed({
+      purrr::map_dfr(target_vars, function(var) {
+        preds_adj <- predict_ar2(q_train_adj[[var]], horizon_max, var_label = var, context = sprintf("CV fold ending %s", cutoff_label))
+        preds_orig <- restore_series_values(
+          preds_adj,
+          rep(var, horizon_max),
+          time_indices,
+          transforms
+        )
+        tibble::tibble(
+          variable = var,
+          step_ahead = horizon_steps,
+          prediction = preds_orig,
+          model = "AR(2)"
+        )
+      })
     })
+    ar_base <- ar_eval$result
+    ar_elapsed <- ar_elapsed + ar_eval$elapsed
 
     train_last_month <- quarter_to_month_end(cutoff_quarter)
     x_train_full <- stats::window(baro_diff_series, end = train_last_month)
@@ -563,17 +578,21 @@ run_benchmark_cross_validation <- function(
         stats::window(ts_obj, end = baro_end)
       })
 
-      mfvar_result <- forecast_mfvar(
-        q_train_adj,
-        monthly_train_trimmed,
-        transforms,
-        n_lags,
-        horizon_max,
-        target_vars,
-        seed = 1000L + idx * 10L + extra_months,
-        return_model = FALSE,
-        extract_states = TRUE
-      )
+      mfvar_eval <- measure_elapsed({
+        forecast_mfvar(
+          q_train_adj,
+          monthly_train_trimmed,
+          transforms,
+          n_lags,
+          horizon_max,
+          target_vars,
+          seed = 1000L + idx * 10L + extra_months,
+          return_model = FALSE,
+          extract_states = TRUE
+        )
+      })
+      mfvar_result <- mfvar_eval$result
+      mfvar_elapsed <- mfvar_elapsed + mfvar_eval$elapsed
       
       mfvar_pred <- mfvar_result$predictions |>
         tidyr::complete(
@@ -593,66 +612,82 @@ run_benchmark_cross_validation <- function(
       }
       x_future_ts <- stats::ts(x_future_vec, start = future_start, frequency = 12)
 
-      midas_trend_pred <- purrr::map_dfr(target_vars, function(var) {
-        preds <- forecast_midas_series(
-          y_series = y_ts_list[[var]],
-          train_rows = train_rows,
-          x_train_full = x_train_full,
-          x_future_full = x_future_ts,
-          horizon = horizon_max,
-          include_trend = TRUE
-        )
-        if (all(is.na(preds))) {
-          warning(sprintf("MIDAS (trend) for %s returned all NAs at fold %s", var, cutoff_label))
-        }
-        tibble::tibble(variable = var, step_ahead = horizon_steps, prediction = preds, model = "MIDAS (trend)")
+      midas_trend_eval <- measure_elapsed({
+        purrr::map_dfr(target_vars, function(var) {
+          preds <- forecast_midas_series(
+            y_series = y_ts_list[[var]],
+            train_rows = train_rows,
+            x_train_full = x_train_full,
+            x_future_full = x_future_ts,
+            horizon = horizon_max,
+            include_trend = TRUE
+          )
+          if (all(is.na(preds))) {
+            warning(sprintf("MIDAS (trend) for %s returned all NAs at fold %s", var, cutoff_label))
+          }
+          tibble::tibble(variable = var, step_ahead = horizon_steps, prediction = preds, model = "MIDAS (trend)")
+        })
       })
+      midas_trend_pred <- midas_trend_eval$result
+      midas_kof_elapsed <- midas_kof_elapsed + midas_trend_eval$elapsed
 
-      midas_simple_pred <- purrr::map_dfr(target_vars, function(var) {
-        preds <- forecast_midas_series(
-          y_series = y_ts_list[[var]],
-          train_rows = train_rows,
-          x_train_full = x_train_full,
-          x_future_full = x_future_ts,
-          horizon = horizon_max,
-          include_trend = FALSE
-        )
-        if (all(is.na(preds))) {
-          warning(sprintf("MIDAS (no trend) for %s returned all NAs at fold %s", var, cutoff_label))
-        }
-        tibble::tibble(variable = var, step_ahead = horizon_steps, prediction = preds, model = "MIDAS")
+      midas_simple_eval <- measure_elapsed({
+        purrr::map_dfr(target_vars, function(var) {
+          preds <- forecast_midas_series(
+            y_series = y_ts_list[[var]],
+            train_rows = train_rows,
+            x_train_full = x_train_full,
+            x_future_full = x_future_ts,
+            horizon = horizon_max,
+            include_trend = FALSE
+          )
+          if (all(is.na(preds))) {
+            warning(sprintf("MIDAS (no trend) for %s returned all NAs at fold %s", var, cutoff_label))
+          }
+          tibble::tibble(variable = var, step_ahead = horizon_steps, prediction = preds, model = "MIDAS")
+        })
       })
-      
+      midas_simple_pred <- midas_simple_eval$result
+      midas_kof_elapsed <- midas_kof_elapsed + midas_simple_eval$elapsed
+
       # MIDAS using MF-VAR latent states as monthly regressor
-      midas_latent_trend_pred <- purrr::map_dfr(target_vars, function(var) {
-        preds <- forecast_midas_latent(
-          y_series = y_ts_list[[var]],
-          train_rows = train_rows,
-          latent_states_df = latent_states_fold,
-          variable_name = var,
-          horizon = horizon_max,
-          include_trend = TRUE
-        )
-        if (all(is.na(preds))) {
-          warning(sprintf("MIDAS-Latent (trend) for %s returned all NAs at fold %s", var, cutoff_label))
-        }
-        tibble::tibble(variable = var, step_ahead = horizon_steps, prediction = preds, model = "MIDAS-Latent (trend)")
+      midas_latent_trend_eval <- measure_elapsed({
+        purrr::map_dfr(target_vars, function(var) {
+          preds <- forecast_midas_latent(
+            y_series = y_ts_list[[var]],
+            train_rows = train_rows,
+            latent_states_df = latent_states_fold,
+            variable_name = var,
+            horizon = horizon_max,
+            include_trend = TRUE
+          )
+          if (all(is.na(preds))) {
+            warning(sprintf("MIDAS-Latent (trend) for %s returned all NAs at fold %s", var, cutoff_label))
+          }
+          tibble::tibble(variable = var, step_ahead = horizon_steps, prediction = preds, model = "MIDAS-Latent (trend)")
+        })
       })
-      
-      midas_latent_simple_pred <- purrr::map_dfr(target_vars, function(var) {
-        preds <- forecast_midas_latent(
-          y_series = y_ts_list[[var]],
-          train_rows = train_rows,
-          latent_states_df = latent_states_fold,
-          variable_name = var,
-          horizon = horizon_max,
-          include_trend = FALSE
-        )
-        if (all(is.na(preds))) {
-          warning(sprintf("MIDAS-Latent (no trend) for %s returned all NAs at fold %s", var, cutoff_label))
-        }
-        tibble::tibble(variable = var, step_ahead = horizon_steps, prediction = preds, model = "MIDAS-Latent")
+      midas_latent_trend_pred <- midas_latent_trend_eval$result
+      midas_latent_elapsed <- midas_latent_elapsed + midas_latent_trend_eval$elapsed
+
+      midas_latent_simple_eval <- measure_elapsed({
+        purrr::map_dfr(target_vars, function(var) {
+          preds <- forecast_midas_latent(
+            y_series = y_ts_list[[var]],
+            train_rows = train_rows,
+            latent_states_df = latent_states_fold,
+            variable_name = var,
+            horizon = horizon_max,
+            include_trend = FALSE
+          )
+          if (all(is.na(preds))) {
+            warning(sprintf("MIDAS-Latent (no trend) for %s returned all NAs at fold %s", var, cutoff_label))
+          }
+          tibble::tibble(variable = var, step_ahead = horizon_steps, prediction = preds, model = "MIDAS-Latent")
+        })
       })
+      midas_latent_simple_pred <- midas_latent_simple_eval$result
+      midas_latent_elapsed <- midas_latent_elapsed + midas_latent_simple_eval$elapsed
 
       fold_predictions[[extra_idx]] <- dplyr::bind_rows(
         mfvar_pred,
@@ -678,9 +713,19 @@ run_benchmark_cross_validation <- function(
       return(NULL)
     }
 
+    fold_total_elapsed <- (proc.time() - fold_timer_start)[["elapsed"]]
+
     list(
       predictions = combined_predictions,
-      actual = actual_fold
+      actual = actual_fold,
+      timings = list(
+        fold_index = idx,
+        mfvar = mfvar_elapsed,
+        midas_kof = midas_kof_elapsed,
+        midas_latent = midas_latent_elapsed,
+        ar = ar_elapsed,
+        total = fold_total_elapsed
+      )
     )
   }
 
@@ -703,14 +748,7 @@ run_benchmark_cross_validation <- function(
     }
   }
 
-  if (progress_enabled) {
-    fold_results <- progressr::with_progress({
-      p <- progressr::progressor(steps = total_folds)
-      run_fold_collection(function(msg) p(message = msg))
-    })
-  } else {
-    fold_results <- run_fold_collection(NULL)
-  }
+  fold_results <- run_fold_collection(NULL)
 
   fold_results <- purrr::compact(fold_results)
 
@@ -722,6 +760,28 @@ run_benchmark_cross_validation <- function(
     actual_tbl <- tibble::tibble()
   }
 
+  timing_entries <- purrr::map(fold_results, "timings")
+  timings_tbl <- if (length(timing_entries)) {
+    purrr::map_dfr(timing_entries, function(tm) {
+      tibble::tibble(
+        fold_index = tm$fold_index,
+        mfvar_seconds = tm$mfvar,
+        midas_seconds = tm$midas_kof,
+        midas_latent_seconds = tm$midas_latent,
+        ar_seconds = tm$ar,
+        total_seconds = tm$total
+      )
+    })
+  } else {
+    tibble::tibble()
+  }
+
+  timing_totals <- if (nrow(timings_tbl)) {
+    colSums(dplyr::select(timings_tbl, -fold_index))
+  } else {
+    numeric()
+  }
+
   if (!nrow(predictions_tbl) || !nrow(actual_tbl)) {
     warning("Cross-validation produced no predictions after filtering.")
     return(list(
@@ -730,7 +790,8 @@ run_benchmark_cross_validation <- function(
       metrics_overall = tibble::tibble(),
       folds = tibble::tibble(),
       fold_count = 0L,
-      extra_values = extra_months_options
+      extra_values = extra_months_options,
+      timings = list(per_fold = tibble::tibble(), totals = numeric())
     ))
   }
 
@@ -766,7 +827,11 @@ run_benchmark_cross_validation <- function(
     metrics_overall = metrics_overall,
     folds = folds_info,
     fold_count = dplyr::n_distinct(cv_results$fold_index),
-    extra_values = sort(unique(cv_results$extra_months))
+    extra_values = sort(unique(cv_results$extra_months)),
+    timings = list(
+      per_fold = timings_tbl,
+      totals = timing_totals
+    )
   )
 }
 
@@ -1058,6 +1123,17 @@ if (run_cv) {
       cv_output$fold_count,
       length(cv_output$extra_values)
     ))
+    timing_totals <- cv_output$timings$totals
+    if (length(timing_totals)) {
+      message(sprintf(
+        "  • CV time (sec): MF-VAR %.2f | MIDAS %.2f | MIDAS-Latent %.2f | AR %.2f | Total %.2f",
+        timing_totals["mfvar_seconds"],
+        timing_totals["midas_seconds"],
+        timing_totals["midas_latent_seconds"],
+        timing_totals["ar_seconds"],
+        timing_totals["total_seconds"]
+      ))
+    }
   }
 } else {
   cv_output <- list(
@@ -1066,13 +1142,18 @@ if (run_cv) {
     metrics_overall = tibble::tibble(),
     folds = tibble::tibble(),
     fold_count = 0L,
-    extra_values = integer()
+    extra_values = integer(),
+    timings = list(per_fold = tibble::tibble(), totals = numeric())
   )
   cv_results <- cv_output$results
   cv_metrics_tbl <- cv_output$metrics_by_horizon
   cv_metrics_overall <- cv_output$metrics_overall
   cv_folds_tbl <- cv_output$folds
 }
+
+cv_timings <- cv_output$timings
+cv_timings_tbl <- if (!is.null(cv_timings$per_fold)) cv_timings$per_fold else tibble::tibble()
+cv_timing_totals <- if (!is.null(cv_timings$totals)) cv_timings$totals else numeric()
 
 # --- Output summaries and plots --------------------------------------------
 stage_status("Output generation", "start")
@@ -1242,6 +1323,9 @@ output_time <- system.time({
   readr::write_csv(forecast_wide, file.path(OUT_CSV_DIR, "model_benchmark_forecasts.csv"))
   readr::write_csv(cv_metrics_export, file.path(OUT_CSV_DIR, "model_benchmark_cv_metrics.csv"))
   readr::write_csv(cv_results_export, file.path(OUT_CSV_DIR, "model_benchmark_cv_predictions.csv"))
+  if (nrow(cv_timings_tbl)) {
+    readr::write_csv(cv_timings_tbl, file.path(OUT_CSV_DIR, "model_benchmark_cv_timings.csv"))
+  }
 
   cat(
     "Benchmark comparison complete.\n",
@@ -1250,6 +1334,7 @@ output_time <- system.time({
     "  - output/benchmarks/csv/model_benchmark_forecasts.csv\n",
     "  - output/benchmarks/csv/model_benchmark_cv_metrics.csv\n",
     "  - output/benchmarks/csv/model_benchmark_cv_predictions.csv\n",
+    if (nrow(cv_timings_tbl)) "  - output/benchmarks/csv/model_benchmark_cv_timings.csv\n" else "",
     "  - output/benchmarks/model_benchmark_summary.md\n",
     paste0("  - ", plot_paths, collapse = "\n"),
     "\n",
