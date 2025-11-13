@@ -188,31 +188,6 @@ forecast_targets <- forecast_df |>
 readr::write_csv(forecast_df, file.path(OUT_DIR, "midas_forecasts_full.csv"))
 readr::write_csv(forecast_targets, file.path(OUT_DIR, "midas_forecasts_targets.csv"))
 
-# --- Evaluation --------------------------------------------------------------
-eval_df <- forecast_df |>
-  dplyr::filter(step_ahead %in% forecast_horizons) |>
-  tidyr::pivot_longer(
-    cols = c(midas_trend, midas_simple),
-    names_to = "model",
-    values_to = "forecast"
-  ) |>
-  dplyr::mutate(
-    error = forecast - actual,
-    squared_error = error^2,
-    abs_error = abs(error)
-  )
-
-metrics <- eval_df |>
-  dplyr::group_by(model, horizon) |>
-  dplyr::summarise(
-    rmse = sqrt(mean(squared_error, na.rm = TRUE)),
-    mae = mean(abs_error, na.rm = TRUE),
-    n_obs = sum(!is.na(error)),
-    .groups = "drop"
-  )
-
-readr::write_csv(metrics, file.path(OUT_DIR, "midas_evaluation.csv"))
-
 # --- Summary Output ----------------------------------------------------------
 summary_path <- file.path(OUT_DIR, "midas_summary.txt")
 sink(summary_path)
@@ -240,8 +215,8 @@ for (var in target_vars) {
   }
 }
 
-cat("\n==== Forecast Evaluation ====\n\n")
-print(metrics, n = nrow(metrics))
+cat("\n==== Note ====\n")
+cat("For model evaluation and benchmarking, see run_benchmarks.R\n")
 
 sink()
 
@@ -250,7 +225,6 @@ message_lines <- c(
   "\nMIDAS pipeline complete. Wrote:\n",
   "  - output/forecasts/midas_forecasts_full.csv\n",
   "  - output/forecasts/midas_forecasts_targets.csv\n",
-  "  - output/forecasts/midas_evaluation.csv\n",
   "  - output/forecasts/midas_summary.txt\n"
 )
 

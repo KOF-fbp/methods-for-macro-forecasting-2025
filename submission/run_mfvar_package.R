@@ -17,11 +17,11 @@ load_required_packages(required_pkgs)
 
 variable <- step_ahead <- horizon <- lower <- median <- upper <- NULL
 
-if (identical(Sys.getenv("MFVAR_VERSION"), "alternative")) {
+if (identical(Sys.getenv("MFVAR_VERSION"), "manual")) {
   stop(
     paste(
-      "Alternative MF-VAR specification not yet implemented on main branch.",
-      "See placeholder 'run_mfvar_alternative.R' or the dedicated feature branch."
+      "Manual MF-VAR specification not yet implemented on main branch.",
+      "See placeholder 'run_mfvar_manual.R' or the dedicated feature branch."
     )
   )
 }
@@ -29,14 +29,19 @@ if (identical(Sys.getenv("MFVAR_VERSION"), "alternative")) {
 # --- I/O paths ---------------------------------------------------------------
 DATA_DIR <- file.path(".", "data")
 OUT_DIR  <- file.path(".", "output", "forecasts")
-if (!dir.exists(OUT_DIR)) dir.create(OUT_DIR, recursive = TRUE)
+CSV_DIR  <- file.path(OUT_DIR, "csv")
+PLOT_DIR <- file.path(OUT_DIR, "plots")
+MODEL_DIR <- file.path(OUT_DIR, "models")
+for (dir in c(OUT_DIR, CSV_DIR, PLOT_DIR, MODEL_DIR)) {
+  if (!dir.exists(dir)) dir.create(dir, recursive = TRUE)
+}
 
 # --- Data preparation -------------------------------------------------------
 # Pull the transformed quarterly series and align with monthly indicators sourced
 # from the combined SNB/KOF dataset. We keep only periods where every chosen
 # monthly series is available.
 qdat_raw <- read_quarterly_data(DATA_DIR)
-monthly_variables <- c("plkopr", "devkum", "amarbma", "snboffzisa")
+monthly_variables <- c("plkopr", "devkum", "amarbma")
 monthly_data <- read_combined_timeseries(DATA_DIR, variables = monthly_variables)
 
 start_quarter <- zoo::as.yearqtr(monthly_data$start_date)
@@ -58,12 +63,6 @@ Y <- build_Y(qdat_adj, monthly_ts)
 target_vars <- target_variables
 n_lags <- 5
 
-# --- Evaluation suites ------------------------------------------------------
-# Benchmark MF-VAR forecasts against AR(2) both on a holdout window and
-# in expanding window one-step-ahead cross-validation.
-holdout_results <- run_holdout_evaluation(qdat_adj, qdat_orig, monthly_ts, n_lags, target_vars, transforms, OUT_DIR)
-cv_results <- run_cross_validation(qdat_adj, qdat_orig, monthly_ts, n_lags, target_vars, transforms, OUT_DIR)
-
 # --- Estimation and forecasting --------------------------------------------
 # Refit the MF-VAR on the full sample and produce 12 quarter-ahead forecasts
 # (sufficient to cover the 1-year horizon after aggregation).
@@ -74,9 +73,9 @@ latent_states_plot <- NULL
 latent_heatmap_plot <- NULL
 if (!identical(Sys.getenv("MFVAR_EXTRACT_STATES"), "0")) {
   latent_states <- extract_latent_states(mod_ss, summary = "mean")
-  latent_states_path <- save_latent_states_csv(latent_states, OUT_DIR)
-  latent_states_plot <- plot_latent_states(latent_states, OUT_DIR)
-  latent_heatmap_plot <- plot_latent_states(latent_states, OUT_DIR, mode = "heatmap")
+  latent_states_path <- save_latent_states_csv(latent_states, CSV_DIR)
+  latent_states_plot <- plot_latent_states(latent_states, PLOT_DIR)
+  latent_heatmap_plot <- plot_latent_states(latent_states, PLOT_DIR, mode = "heatmap")
 }
 
 fc <- predict(mod_ss, aggregate_fcst = TRUE, pred_bands = 0.8)
@@ -133,30 +132,16 @@ if (nrow(missing_targets)) {
 fc_targets <- fc_targets |>
   dplyr::select(variable, horizon, quarter_end, median, lower, upper)
 
-readr::write_csv(fc,         file.path(OUT_DIR, "mfvar_forecasts_full.csv"))
-readr::write_csv(fc_targets, file.path(OUT_DIR, "mfvar_forecasts_targets.csv"))
+readr::write_csv(fc,         file.path(CSV_DIR, "mfvar_forecasts_full.csv"))
+readr::write_csv(fc_targets, file.path(CSV_DIR, "mfvar_forecasts_targets.csv"))
 
 # --- Summaries --------------------------------------------------------------
 summary_path <- file.path(OUT_DIR, "mfvar_summary.txt")
 sink(summary_path)
 cat("\n==== MF-VAR summary (Minnesota prior, IW covariance) ====\n\n")
 print(summary(mod_ss))
-
-cat("\n==== Forecast evaluation ====\n")
-if (!is.null(holdout_results$table)) {
-  cat(sprintf("\nHoldout horizon: %d quarter(s).\n\n", holdout_results$horizon))
-  print(holdout_results$table, n = nrow(holdout_results$table))
-} else {
-  cat("\nSkipped (insufficient holdout sample after reserving lags).\n")
-}
-
-cat("\n==== Expanding window 1-step cross-validation ====\n")
-if (!is.null(cv_results$table)) {
-  cat(sprintf("\nFolds: %d (last %d quarter(s)).\n\n", cv_results$folds, cv_results$horizon))
-  print(cv_results$table, n = nrow(cv_results$table))
-} else {
-  cat("\nSkipped (not enough data or no valid folds).\n")
-}
+cat("\n==== Note ====\n")
+cat("For model evaluation and benchmarking, see run_benchmarks.R\n")
 sink()
 
 # --- Plots ------------------------------------------------------------------
@@ -220,8 +205,7 @@ if (nrow(fc_gdp)) {
   }
 
   ar2_gdp <- tibble::tibble(time = fc_gdp$time, ar2 = ar2_vals)
-  gdp_plot_path <- plot_gdp_forecasts(fc_gdp, ar2_gdp, OUT_DIR)
-  gdp_context_path <- plot_gdp_forecasts_with_history(fc_gdp, ar2_gdp, qdat_orig, OUT_DIR)
+  gdp_context_path <- plot_gdp_forecasts_with_history(fc_gdp, ar2_gdp, qdat_orig, PLOT_DIR)
 }
 
 if (nrow(fc_infl)) {
@@ -246,8 +230,7 @@ if (nrow(fc_infl)) {
   }
 
   ar2_infl <- tibble::tibble(time = fc_infl$time, ar2 = ar2_vals)
-  inflation_plot_path <- plot_inflation_forecasts(fc_infl, ar2_infl, OUT_DIR)
-  inflation_context_path <- plot_inflation_forecasts_with_history(fc_infl, ar2_infl, qdat_orig, OUT_DIR)
+  inflation_context_path <- plot_inflation_forecasts_with_history(fc_infl, ar2_infl, qdat_orig, PLOT_DIR)
 }
 
 if (nrow(fc_exch)) {
@@ -272,69 +255,43 @@ if (nrow(fc_exch)) {
   }
 
   ar2_exch <- tibble::tibble(time = fc_exch$time, ar2 = exp(ar2_vals))
-  exch_plot_path <- plot_exch_rate_forecasts(fc_exch, ar2_exch, OUT_DIR)
-  exch_context_path <- plot_exch_rate_forecasts_with_history(fc_exch, ar2_exch, qdat_orig, OUT_DIR)
+  exch_context_path <- plot_exch_rate_forecasts_with_history(fc_exch, ar2_exch, qdat_orig, PLOT_DIR)
 }
 
 # --- Persist model ----------------------------------------------------------
-saveRDS(mod_ss, file.path(OUT_DIR, "mfvar_model_ss.rds"))
+saveRDS(mod_ss, file.path(MODEL_DIR, "mfvar_model_ss.rds"))
 
 # --- Completion message -----------------------------------------------------
 message_lines <- c(
   "Done. Wrote:\n",
   "  - output/forecasts/mfvar_summary.txt\n",
-  "  - output/forecasts/mfvar_forecasts_full.csv\n",
-  "  - output/forecasts/mfvar_forecasts_targets.csv\n"
+  "  - output/forecasts/csv/mfvar_forecasts_full.csv\n",
+  "  - output/forecasts/csv/mfvar_forecasts_targets.csv\n"
 )
 
-if (!is.null(holdout_results$path)) {
-  message_lines <- c(message_lines, "  - output/forecasts/forecast_evaluation.csv\n")
-} else {
-  message_lines <- c(message_lines, "  - forecast evaluation skipped (not enough holdout data)\n")
-}
-
-if (!is.null(cv_results$path)) {
-  message_lines <- c(message_lines, "  - output/forecasts/forecast_cross_validation.csv\n")
-} else {
-  message_lines <- c(message_lines, "  - cross-validation skipped or unavailable\n")
-}
-
-if (!is.null(cv_results$folds_path)) {
-  message_lines <- c(message_lines, "  - output/forecasts/forecast_cross_validation_folds.csv\n")
-}
-
-if (!is.null(gdp_plot_path)) {
-  message_lines <- c(message_lines, "  - output/forecasts/forecast_gdp_growth.png\n")
-}
 if (!is.null(gdp_context_path)) {
-  message_lines <- c(message_lines, "  - output/forecasts/forecast_gdp_growth_context.png\n")
-}
-if (!is.null(inflation_plot_path)) {
-  message_lines <- c(message_lines, "  - output/forecasts/forecast_inflation.png\n")
+  message_lines <- c(message_lines, "  - output/forecasts/plots/forecast_gdp_growth_context.png\n")
 }
 if (!is.null(inflation_context_path)) {
-  message_lines <- c(message_lines, "  - output/forecasts/forecast_inflation_context.png\n")
-}
-if (!is.null(exch_plot_path)) {
-  message_lines <- c(message_lines, "  - output/forecasts/forecast_exchange_rate.png\n")
+  message_lines <- c(message_lines, "  - output/forecasts/plots/forecast_inflation_context.png\n")
 }
 if (!is.null(exch_context_path)) {
-  message_lines <- c(message_lines, "  - output/forecasts/forecast_exchange_rate_context.png\n")
+  message_lines <- c(message_lines, "  - output/forecasts/plots/forecast_exchange_rate_context.png\n")
 }
 
 if (!is.null(latent_states_path)) {
-  message_lines <- c(message_lines, "  - output/forecasts/mfvar_latent_states.csv\n")
+  message_lines <- c(message_lines, "  - output/forecasts/csv/mfvar_latent_states.csv\n")
 }
 if (!is.null(latent_states_plot)) {
-  message_lines <- c(message_lines, "  - output/forecasts/mfvar_latent_states_timeseries.png\n")
+  message_lines <- c(message_lines, "  - output/forecasts/plots/mfvar_latent_states_timeseries.png\n")
 }
 if (!is.null(latent_heatmap_plot)) {
-  message_lines <- c(message_lines, "  - output/forecasts/mfvar_latent_states_heatmap.png\n")
+  message_lines <- c(message_lines, "  - output/forecasts/plots/mfvar_latent_states_heatmap.png\n")
 }
 
 message_lines <- c(
   message_lines,
-  "  - output/forecasts/mfvar_model_ss.rds"
+  "  - output/forecasts/models/mfvar_model_ss.rds"
 )
 
 message(paste0(message_lines, collapse = ""))

@@ -116,12 +116,12 @@ verify_environment <- function() {
 }
 
 run_mfvar <- function() {
-  cat("\n=== Running MF-VAR Pipeline ===\n\n")
+  cat("\n=== Running MF-VAR Pipeline (Package Implementation) ===\n\n")
   cat("Starting Mixed-Frequency VAR estimation and forecasting...\n")
   cat("This may take several minutes.\n\n")
   
   tryCatch({
-    source("run_mfvar.R", local = new.env())
+    source("run_mfvar_package.R", local = new.env())
     cat("\n✓ MF-VAR pipeline completed successfully!\n")
     cat("Check output/ directory for results.\n\n")
   }, error = function(e) {

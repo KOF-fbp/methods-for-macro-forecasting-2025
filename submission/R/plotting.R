@@ -22,6 +22,7 @@ plot_target_forecasts <- function(fc_df, ar_df, out_dir, title, subtitle, y_labe
       linewidth = 1,
       linetype = "dashed"
     ) +
+    ggplot2::scale_x_date(labels = function(x) format(zoo::as.yearqtr(x), "%Y Q%q")) +
     ggplot2::scale_colour_manual(name = NULL, values = c("MF-VAR" = "#1b9e77", "AR(2)" = "#d95f02")) +
     ggplot2::scale_fill_manual(name = NULL, values = c("MF-VAR" = "#1b9e77")) +
     ggplot2::labs(
@@ -99,6 +100,7 @@ plot_target_forecasts_with_history <- function(fc_df, ar_df, history_df, out_dir
       linetype = "dashed",
       inherit.aes = FALSE
     ) +
+    ggplot2::scale_x_date(labels = function(x) format(zoo::as.yearqtr(x), "%Y Q%q")) +
     ggplot2::scale_colour_manual(name = NULL, values = c("MF-VAR" = "#1b9e77", "AR(2)" = "#d95f02")) +
     ggplot2::scale_fill_manual(name = NULL, values = c("MF-VAR" = "#1b9e77")) +
     ggplot2::labs(
@@ -113,18 +115,6 @@ plot_target_forecasts_with_history <- function(fc_df, ar_df, history_df, out_dir
   out_path <- file.path(out_dir, file_name)
   ggplot2::ggsave(out_path, p, width = 8, height = 4.5, dpi = 120)
   out_path
-}
-
-plot_gdp_forecasts <- function(fc_gdp, ar_gdp, out_dir) {
-  plot_target_forecasts(
-    fc_df = fc_gdp,
-    ar_df = ar_gdp,
-    out_dir = out_dir,
-    title = "GDP growth forecasts",
-    subtitle = "Comparison of MF-VAR and AR(2) benchmark",
-    y_label = "Annualised percentage",
-    file_name = "forecast_gdp_growth.png"
-  )
 }
 
 plot_gdp_forecasts_with_history <- function(fc_gdp, ar_gdp, qdat, out_dir) {
@@ -147,18 +137,6 @@ plot_gdp_forecasts_with_history <- function(fc_gdp, ar_gdp, qdat, out_dir) {
   )
 }
 
-plot_inflation_forecasts <- function(fc_infl, ar_infl, out_dir) {
-  plot_target_forecasts(
-    fc_df = fc_infl,
-    ar_df = ar_infl,
-    out_dir = out_dir,
-    title = "Inflation forecasts",
-    subtitle = "Comparison of MF-VAR and AR(2) benchmark",
-    y_label = "Annualised percentage",
-    file_name = "forecast_inflation.png"
-  )
-}
-
 plot_inflation_forecasts_with_history <- function(fc_infl, ar_infl, qdat, out_dir) {
   history_df <- tibble::tibble(
     time = zoo::as.Date(qdat$qtr, frac = 1),
@@ -174,18 +152,6 @@ plot_inflation_forecasts_with_history <- function(fc_infl, ar_infl, qdat, out_di
     subtitle = "Shaded area shows MF-VAR 80% interval; dashed line is AR(2)",
     y_label = "Annualised percentage",
     file_name = "forecast_inflation_context.png"
-  )
-}
-
-plot_exch_rate_forecasts <- function(fc_exch, ar_exch, out_dir) {
-  plot_target_forecasts(
-    fc_df = fc_exch,
-    ar_df = ar_exch,
-    out_dir = out_dir,
-    title = "Exchange-rate forecasts",
-    subtitle = "Comparison of MF-VAR and AR(2) benchmark",
-    y_label = "CHF per EUR",
-    file_name = "forecast_exchange_rate.png"
   )
 }
 
