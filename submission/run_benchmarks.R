@@ -31,6 +31,7 @@ if (skip_cv) {
 source(file.path("R", "setup.R"))
 source(file.path("R", "data_processing.R"))
 source(file.path("R", "evaluation.R"))
+source(file.path("R", "latent_states.R"))
 
 stage_status <- local({
   stage_env <- new.env(parent = emptyenv())
@@ -73,7 +74,11 @@ stage_status(status = "done")
 
 DATA_DIR <- file.path(".", "data")
 OUT_DIR <- file.path(".", "output", "benchmarks")
+OUT_CSV_DIR <- file.path(OUT_DIR, "csv")
+OUT_PLOTS_DIR <- file.path(OUT_DIR, "plots")
 if (!dir.exists(OUT_DIR)) dir.create(OUT_DIR, recursive = TRUE)
+if (!dir.exists(OUT_CSV_DIR)) dir.create(OUT_CSV_DIR, recursive = TRUE)
+if (!dir.exists(OUT_PLOTS_DIR)) dir.create(OUT_PLOTS_DIR, recursive = TRUE)
 
 forecast_steps <- c(1L, 4L)
 history_quarters <- 4L
@@ -129,8 +134,8 @@ coverage_label <- function(extra_months) {
   )
 }
 
-forecast_mfvar <- function(q_train_adj, baro_train, transforms, n_lags, horizon_quarters, target_vars, seed = 123L, return_model = FALSE) {
-  Y_train <- build_Y(q_train_adj, baro_train)
+forecast_mfvar <- function(q_train_adj, monthly_train, transforms, n_lags, horizon_quarters, target_vars, seed = 123L, return_model = FALSE, extract_states = FALSE) {
+  Y_train <- build_Y(q_train_adj, monthly_train)
   mod <- tryCatch(
     estimate_mfvar_model(Y_train, n_lags, n_fcst = horizon_quarters * 3L, seed = seed),
     error = function(err) {
@@ -143,7 +148,7 @@ forecast_mfvar <- function(q_train_adj, baro_train, transforms, n_lags, horizon_
     fallback <- purrr::map_dfr(target_vars, function(var) {
       tibble::tibble(variable = var, step_ahead = seq_len(horizon_quarters), prediction = NA_real_)
     })
-    result <- list(predictions = fallback)
+    result <- list(predictions = fallback, latent_states = NULL)
     if (return_model) result$model <- NULL
     return(result)
   }
@@ -165,7 +170,18 @@ forecast_mfvar <- function(q_train_adj, baro_train, transforms, n_lags, horizon_
     ) |>
     dplyr::select(variable, step_ahead, prediction)
 
-  result <- list(predictions = fc)
+  latent_states <- NULL
+  if (isTRUE(extract_states)) {
+    latent_states <- tryCatch(
+      extract_latent_states(mod, summary = "mean"),
+      error = function(err) {
+        warning(sprintf("Latent state extraction failed: %s", conditionMessage(err)), call. = FALSE)
+        NULL
+      }
+    )
+  }
+
+  result <- list(predictions = fc, latent_states = latent_states)
   if (return_model) result$model <- mod
   result
 }
@@ -237,6 +253,98 @@ forecast_midas_series <- function(y_series, train_rows, x_train_full, x_future_f
   result
 }
 
+forecast_midas_latent <- function(y_series, train_rows, latent_states_df, variable_name, horizon, include_trend) {
+  # Use MF-VAR latent states as monthly regressor for MIDAS instead of KOF Barometer
+  # latent_states_df: data frame with 'date' column and target variable columns (gdp_growth, inflation, exch_rate)
+  
+  if (is.null(latent_states_df) || !nrow(latent_states_df)) {
+    warning("MIDAS-Latent: No latent states provided", call. = FALSE)
+    return(rep(NA_real_, horizon))
+  }
+  
+  if (!variable_name %in% names(latent_states_df)) {
+    warning(sprintf("MIDAS-Latent: Variable %s not found in latent states", variable_name), call. = FALSE)
+    return(rep(NA_real_, horizon))
+  }
+  
+  # Extract training portion of y series
+  y_train <- stats::window(y_series, end = stats::time(y_series)[train_rows])
+  
+  # Check if we have enough data
+  if (length(y_train) < 3) {
+    warning(sprintf("MIDAS-Latent: Insufficient y_train data (n=%d)", length(y_train)), call. = FALSE)
+    return(rep(NA_real_, horizon))
+  }
+  
+  # Convert latent states to ts object aligned with quarterly data
+  # Latent states are monthly; we need to align with training sample
+  latent_vec <- latent_states_df[[variable_name]]
+  if (length(latent_vec) < train_rows * 3) {
+    warning(sprintf("MIDAS-Latent: Insufficient latent state data (n=%d, need %d)", 
+                   length(latent_vec), train_rows * 3), call. = FALSE)
+    return(rep(NA_real_, horizon))
+  }
+  
+  # Extract training portion (first train_rows * 3 months)
+  x_train_full <- stats::ts(latent_vec[1:(train_rows * 3)], frequency = 12)
+  
+  # For future values, use last available value as fill (naive forecast)
+  x_future_vec <- rep(latent_vec[train_rows * 3], horizon * 3)
+  x_future_full <- stats::ts(x_future_vec, frequency = 12)
+  
+  if (length(x_train_full) < 6) {
+    warning(sprintf("MIDAS-Latent: Insufficient x_train data (n=%d)", length(x_train_full)), call. = FALSE)
+    return(rep(NA_real_, horizon))
+  }
+  
+  trend_train <- seq_len(length(y_train))
+  
+  # Use data list approach (required for midasr::forecast to work) with AR(1)
+  data_list <- list(y = y_train, x = x_train_full)
+  formula_obj <- stats::as.formula("y ~ mls(y, k = 2, m = 1) + fmls(x, k = 2, m = 3)")
+
+  if (isTRUE(include_trend)) {
+    data_list$trend <- trend_train
+    formula_obj <- stats::as.formula("y ~ trend + mls(y, k = 2, m = 1) + fmls(x, k = 2, m = 3)")
+  }
+
+  fit <- try(
+    midasr::midas_r(formula_obj, data = data_list, start = list(x = rep(0, 3))),
+    silent = TRUE
+  )
+
+  if (inherits(fit, "try-error")) {
+    warning(sprintf("MIDAS-Latent fit error: %s", as.character(fit)), call. = FALSE)
+    return(rep(NA_real_, horizon))
+  }
+
+  # Prepare newdata with matching variable names
+  newdata <- list(x = x_future_full)
+  if (isTRUE(include_trend)) {
+    newdata$trend <- trend_train[length(trend_train)] + seq_len(horizon)
+  }
+
+  # Use dynamic forecasting (works better than static for multi-step ahead)
+  fc <- try(
+    midasr::forecast(fit, newdata = newdata, h = horizon, method = "dynamic"),
+    silent = TRUE
+  )
+
+  if (inherits(fc, "try-error")) {
+    warning(sprintf("MIDAS-Latent forecast error: %s", as.character(fc)), call. = FALSE)
+    return(rep(NA_real_, horizon))
+  }
+
+  result <- as.numeric(fc$mean)
+  if (length(result) != horizon) {
+    warning(sprintf("MIDAS-Latent forecast length mismatch (expected %d, got %d)", 
+                   horizon, length(result)), call. = FALSE)
+    return(rep(NA_real_, horizon))
+  }
+  
+  result
+}
+
 summarise_metrics <- function(tbl) {
   tbl |>
     dplyr::summarise(
@@ -278,6 +386,7 @@ run_benchmark_cross_validation <- function(
     qdat_adj,
     qdat_orig,
     transforms,
+    monthly_series_list,
     baro_ts,
     baro_diff_series,
     y_ts_list,
@@ -343,9 +452,9 @@ run_benchmark_cross_validation <- function(
   cores_available <- parallel::detectCores(logical = TRUE)
   default_workers <- if (is.null(cores_available) || !is.finite(cores_available)) 1L else max(1L, cores_available - 1L)
   
-  # Force single-threaded execution to avoid parallel variable scoping issues with MIDAS
-  # (midasr package functions and closures don't export properly to workers)
-  desired_workers <- 1L  # Force single-threaded until parallel globals properly configured
+  # Force single-threaded execution to avoid MIDAS serialization issues
+  # MIDAS models fail when run in parallel due to closure scoping problems
+  desired_workers <- 1L
   
   if (!is.numeric(desired_workers) || !is.finite(desired_workers)) desired_workers <- 1L
   desired_workers <- as.integer(desired_workers)
@@ -446,25 +555,35 @@ run_benchmark_cross_validation <- function(
 
     for (extra_idx in seq_along(extra_months_options)) {
       extra_months <- extra_months_options[extra_idx]
-      baro_end <- add_months(train_last_month, extra_months)
-      baro_train <- stats::window(baro_ts, end = baro_end)
+      
+      # For MF-VAR: trim monthly indicators to training period + extra_months
+      train_last_qtr_cv <- q_train_orig$qtr[nrow(q_train_orig)]
+      baro_end <- add_months(quarter_to_month_end(train_last_qtr_cv), extra_months)
+      monthly_train_trimmed <- lapply(monthly_series_list, function(ts_obj) {
+        stats::window(ts_obj, end = baro_end)
+      })
 
-      mfvar_pred <- forecast_mfvar(
+      mfvar_result <- forecast_mfvar(
         q_train_adj,
-        baro_train,
+        monthly_train_trimmed,
         transforms,
         n_lags,
         horizon_max,
         target_vars,
         seed = 1000L + idx * 10L + extra_months,
-        return_model = FALSE
-      )$predictions |>
+        return_model = FALSE,
+        extract_states = TRUE
+      )
+      
+      mfvar_pred <- mfvar_result$predictions |>
         tidyr::complete(
           variable = target_vars,
           step_ahead = horizon_steps,
           fill = list(prediction = NA_real_)
         ) |>
         dplyr::mutate(model = "MF-VAR")
+      
+      latent_states_fold <- mfvar_result$latent_states
 
       fill_value <- if (length(x_train_full)) utils::tail(x_train_full, 1) else 0
       x_future_vec <- rep(fill_value, horizon_months)
@@ -503,11 +622,44 @@ run_benchmark_cross_validation <- function(
         }
         tibble::tibble(variable = var, step_ahead = horizon_steps, prediction = preds, model = "MIDAS")
       })
+      
+      # MIDAS using MF-VAR latent states as monthly regressor
+      midas_latent_trend_pred <- purrr::map_dfr(target_vars, function(var) {
+        preds <- forecast_midas_latent(
+          y_series = y_ts_list[[var]],
+          train_rows = train_rows,
+          latent_states_df = latent_states_fold,
+          variable_name = var,
+          horizon = horizon_max,
+          include_trend = TRUE
+        )
+        if (all(is.na(preds))) {
+          warning(sprintf("MIDAS-Latent (trend) for %s returned all NAs at fold %s", var, cutoff_label))
+        }
+        tibble::tibble(variable = var, step_ahead = horizon_steps, prediction = preds, model = "MIDAS-Latent (trend)")
+      })
+      
+      midas_latent_simple_pred <- purrr::map_dfr(target_vars, function(var) {
+        preds <- forecast_midas_latent(
+          y_series = y_ts_list[[var]],
+          train_rows = train_rows,
+          latent_states_df = latent_states_fold,
+          variable_name = var,
+          horizon = horizon_max,
+          include_trend = FALSE
+        )
+        if (all(is.na(preds))) {
+          warning(sprintf("MIDAS-Latent (no trend) for %s returned all NAs at fold %s", var, cutoff_label))
+        }
+        tibble::tibble(variable = var, step_ahead = horizon_steps, prediction = preds, model = "MIDAS-Latent")
+      })
 
       fold_predictions[[extra_idx]] <- dplyr::bind_rows(
         mfvar_pred,
         midas_trend_pred,
         midas_simple_pred,
+        midas_latent_trend_pred,
+        midas_latent_simple_pred,
         ar_base
       ) |>
         dplyr::mutate(
@@ -619,13 +771,27 @@ run_benchmark_cross_validation <- function(
 }
 
 qdat_raw <- read_quarterly_data(DATA_DIR)
+
+# Load KOF Barometer for MIDAS-KOF models
 baro_raw <- fetch_kof_barometer()
-trimmed <- trim_to_overlap(qdat_raw, baro_raw)
-stationary <- stationarise_quarterly(trimmed$qdat)
+
+# Load combined timeseries for MF-VAR (3 SNB monthly indicators)
+monthly_raw <- read_combined_timeseries(
+  DATA_DIR,
+  variables = c("plkopr", "devkum", "amarbma")
+)
+
+# Trim quarterly data to overlap with monthly indicators
+trimmed <- trim_to_overlap(qdat_raw, monthly_raw$ts_list)
 qdat_orig <- trimmed$qdat
+monthly_series_list <- window_monthly_series(trimmed$monthly, qdat_orig)
+
+# Also prepare KOF Barometer for MIDAS-KOF models
+baro_ts <- window_baro(baro_raw, qdat_orig)
+
+stationary <- stationarise_quarterly(qdat_orig)
 qdat_adj <- stationary$data
 transforms <- stationary$transforms
-baro_ts <- window_baro(trimmed$baro_ts, qdat_orig)
 
 baro_diff_series <- local({
   first_quarter_date <- zoo::as.Date(qdat_orig$qtr[1], frac = 0)
@@ -685,19 +851,30 @@ if (length(x_future_full) != eval_horizon * months_per_quarter) {
   stop("Monthly regressor length does not cover the holdout horizon.")
 }
 
-baro_train_end <- quarter_to_month_end(q_train_orig$qtr[nrow(q_train_orig)])
-baro_train <- stats::window(baro_ts, end = baro_train_end)
-mfvar_holdout <- forecast_mfvar(
+# Prepare monthly data for MF-VAR (use all available training data)
+# Calculate the end month for training data
+train_last_qtr_mfvar <- q_train_orig$qtr[nrow(q_train_orig)]
+train_last_month_mfvar <- quarter_to_month_end(train_last_qtr_mfvar)
+monthly_train_holdout <- lapply(monthly_series_list, function(ts_obj) {
+  stats::window(ts_obj, end = train_last_month_mfvar)
+})
+
+mfvar_holdout_result <- forecast_mfvar(
   q_train_adj,
-  baro_train,
+  monthly_train_holdout,
   transforms,
   n_lags,
   eval_horizon,
   target_vars,
   seed = 123L,
-  return_model = FALSE
-)$predictions |>
+  return_model = FALSE,
+  extract_states = TRUE
+)
+
+mfvar_holdout <- mfvar_holdout_result$predictions |>
   dplyr::mutate(model = "MF-VAR")
+
+latent_states_holdout <- mfvar_holdout_result$latent_states
 
 ar_holdout <- purrr::map_dfr(target_vars, function(var) {
   preds_adj <- predict_ar2(q_train_adj[[var]], eval_horizon, var_label = var, context = "holdout")
@@ -738,12 +915,38 @@ midas_simple_holdout <- purrr::map_dfr(target_vars, function(var) {
   tibble::tibble(variable = var, step_ahead = seq_len(eval_horizon), prediction = preds, model = "MIDAS")
 })
 
+midas_latent_trend_holdout <- purrr::map_dfr(target_vars, function(var) {
+  preds <- forecast_midas_latent(
+    y_ts_list[[var]],
+    train_rows,
+    latent_states_holdout,
+    var,
+    eval_horizon,
+    include_trend = TRUE
+  )
+  tibble::tibble(variable = var, step_ahead = seq_len(eval_horizon), prediction = preds, model = "MIDAS-Latent (trend)")
+})
+
+midas_latent_simple_holdout <- purrr::map_dfr(target_vars, function(var) {
+  preds <- forecast_midas_latent(
+    y_ts_list[[var]],
+    train_rows,
+    latent_states_holdout,
+    var,
+    eval_horizon,
+    include_trend = FALSE
+  )
+  tibble::tibble(variable = var, step_ahead = seq_len(eval_horizon), prediction = preds, model = "MIDAS-Latent")
+})
+
 # --- Gather predictions ----------------------------------------------------
 predictions_tbl <- dplyr::bind_rows(
   mfvar_holdout,
   ar_holdout,
   midas_trend_holdout,
-  midas_simple_holdout
+  midas_simple_holdout,
+  midas_latent_trend_holdout,
+  midas_latent_simple_holdout
 ) |>
   dplyr::mutate(
     quarter_end = forecast_dates[step_ahead],
@@ -828,6 +1031,7 @@ if (run_cv) {
     qdat_adj = qdat_adj,
     qdat_orig = qdat_orig,
     transforms = transforms,
+    monthly_series_list = monthly_series_list,
     baro_ts = baro_ts,
     baro_diff_series = baro_diff_series,
     y_ts_list = y_ts_list,
@@ -927,12 +1131,14 @@ summary_lines <- c(
 )
 readr::write_lines(summary_lines, summary_path)
 
-plot_models <- c("Actual", "MF-VAR", "MIDAS (trend)", "MIDAS", "AR(2)")
+plot_models <- c("Actual", "MF-VAR", "MIDAS (trend)", "MIDAS", "MIDAS-Latent (trend)", "MIDAS-Latent", "AR(2)")
 colour_map <- c(
   "Actual" = "#000000",
   "MF-VAR" = "#1b9e77",
   "MIDAS (trend)" = "#7570b3",
   "MIDAS" = "#d95f02",
+  "MIDAS-Latent (trend)" = "#66a61e",
+  "MIDAS-Latent" = "#e6ab02",
   "AR(2)" = "#e7298a"
 )
 linetype_map <- c(
@@ -940,6 +1146,8 @@ linetype_map <- c(
   "MF-VAR" = "solid",
   "MIDAS (trend)" = "dashed",
   "MIDAS" = "dashed",
+  "MIDAS-Latent (trend)" = "dotdash",
+  "MIDAS-Latent" = "dotdash",
   "AR(2)" = "dotted"
 )
 
@@ -1005,7 +1213,7 @@ plot_paths <- purrr::map_chr(target_vars, function(var) {
     ggplot2::theme_minimal(base_size = 12) +
     ggplot2::theme(legend.position = "bottom")
 
-  plot_path <- file.path(OUT_DIR, paste0("model_benchmark_plot_", var, ".png"))
+  plot_path <- file.path(OUT_PLOTS_DIR, paste0("model_benchmark_plot_", var, ".png"))
   ggplot2::ggsave(plot_path, plot = p, width = 8, height = 5, dpi = 150)
   plot_path
 })
@@ -1028,19 +1236,19 @@ if (nrow(cv_results) && all(c("extra_months", "fold_index") %in% names(cv_result
   cv_results_export <- cv_results
 }
 
-readr::write_csv(metrics_tbl, file.path(OUT_DIR, "model_benchmark_metrics.csv"))
-readr::write_csv(holdout_metrics_detailed, file.path(OUT_DIR, "model_benchmark_holdout_detailed.csv"))
-readr::write_csv(forecast_wide, file.path(OUT_DIR, "model_benchmark_forecasts.csv"))
-readr::write_csv(cv_metrics_export, file.path(OUT_DIR, "model_benchmark_cv_metrics.csv"))
-readr::write_csv(cv_results_export, file.path(OUT_DIR, "model_benchmark_cv_predictions.csv"))
+readr::write_csv(metrics_tbl, file.path(OUT_CSV_DIR, "model_benchmark_metrics.csv"))
+readr::write_csv(holdout_metrics_detailed, file.path(OUT_CSV_DIR, "model_benchmark_holdout_detailed.csv"))
+readr::write_csv(forecast_wide, file.path(OUT_CSV_DIR, "model_benchmark_forecasts.csv"))
+readr::write_csv(cv_metrics_export, file.path(OUT_CSV_DIR, "model_benchmark_cv_metrics.csv"))
+readr::write_csv(cv_results_export, file.path(OUT_CSV_DIR, "model_benchmark_cv_predictions.csv"))
 
 cat(
   "Benchmark comparison complete.\n",
-  "  - output/benchmarks/model_benchmark_metrics.csv\n",
-  "  - output/benchmarks/model_benchmark_holdout_detailed.csv\n",
-  "  - output/benchmarks/model_benchmark_forecasts.csv\n",
-  "  - output/benchmarks/model_benchmark_cv_metrics.csv\n",
-  "  - output/benchmarks/model_benchmark_cv_predictions.csv\n",
+  "  - output/benchmarks/csv/model_benchmark_metrics.csv\n",
+  "  - output/benchmarks/csv/model_benchmark_holdout_detailed.csv\n",
+  "  - output/benchmarks/csv/model_benchmark_forecasts.csv\n",
+  "  - output/benchmarks/csv/model_benchmark_cv_metrics.csv\n",
+  "  - output/benchmarks/csv/model_benchmark_cv_predictions.csv\n",
   "  - output/benchmarks/model_benchmark_summary.md\n",
   paste0("  - ", plot_paths, collapse = "\n"),
   "\n",
