@@ -1,5 +1,6 @@
-library(devtools)
-install_github("mbannert/swissdata")
+rm(list = ls())
+# library(devtools)
+# install_github("mbannert/swissdata")
 library(swissdata)
 library(yaml)
 library(tidyverse)
@@ -22,7 +23,6 @@ amarbma <- read.csv("ch.snb.amarbma/ch.snb.amarbma.csv")
 # official zinsrate
 snboffzisa <- read.csv("ch.snb.snboffzisa/ch.snb.snboffzisa.csv")
 # couldn't find conretail
-
 # View(devkum)
 
 # meta data
@@ -31,19 +31,13 @@ devkum_meta <- read_yaml("ch.snb.devkum/ch.snb.devkum.yaml")
 amarbma_meta <- read_yaml("ch.snb.amarbma/ch.snb.amarbma.yaml")
 snboffzisa_meta <- read_yaml("ch.snb.snboffzisa/ch.snb.snboffzisa.yaml")
 
-# View(snboffzisa_eu)
-# View(plkopr_meta) 
-# View(devkum_meta) 
-# View(amarbma_meta)
-# View(snboffzisa_meta)
-# View(concon_meta)
 
 # ------------------------------------------------------
 #                       Clean Data
 # ------------------------------------------------------
 
 # --------------- swiss and european zins rate -> good predictor for swiss zinsraten
-snboffzisa_ug <- snboffzisa |> filter(overview == "UG") # swiss policy rate UG 
+# snboffzisa_ug <- snboffzisa |> filter(overview == "UG") # swiss policy rate UG 
 
 
 # Import SRF from the raw SNB CSV file in the data folder
@@ -58,20 +52,54 @@ snboffzisa_eu <- snboffzisa_raw |>
   mutate(Value = as.numeric(Value),
          Date = as.Date(paste0(Date, "-01"))) |>
   select(Date, D0, Value) |>
-  rename(overview = D0, value = Value)
+  rename(overview = D0, value = Value) |>
+  rename(date = Date) |>
+  select(date, snboffzisa_srf = value)
 
 
 # ---------------- Devkum = DevisenKurse Monatlich 
 # chf to eur, monthly avg (m0) 
 devkum_eur <- devkum |>
     filter(mean_end == "m0") |>
-    filter(currency == "eur1")
+    filter(currency == "eur1") |>
+    mutate(date = as.Date(date)) |>
+    select(date, devkum_eur = value)
 
 
+# ----------------- Amarbma = Arbeitsmarktzahlen (t0 = total)
+
+amarbma_t0 <- amarbma |>
+  filter(overview == "t0") |>
+  mutate(date = as.Date(date)) |>
+  select(date, amarbma_t0 = value) 
+
+
+# --------------- plkopr = inflationszahlen
+
+plkopr_fin <- plkopr |>
+  mutate(date = as.Date(date)) |>
+  select(date, plkopr = value)
+
+
+
+# the other 2 are already filtered
+
+
+# Combine series with named columns
+series_list <- list(plkopr_fin, devkum_eur, amarbma_t0, snboffzisa_eu)
+
+combined_df <- reduce(series_list, full_join, by = "date") |>
+  arrange(date)
+
+View(combined_df)
 # TODO: transform each to value & take data as data
 # find best lag
 
 
-
+head(plkopr_fin)
+head(devkum_eur)
+head(amarbma_t0)
 # build matrix 
 
+setwd("/Users/minna/Code/Macro_Forecasting/group_project/methods-for-macro-forecasting-2025")
+write.csv(combined_df, "/submission/data/combined_ts.csv")
