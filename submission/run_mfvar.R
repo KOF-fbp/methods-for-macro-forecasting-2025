@@ -1,4 +1,4 @@
-# Mixed-Frequency VAR with KOF Barometer
+# Mixed-Frequency VAR with Combined Monthly Indicators
 # ---------------------------------------------------------------
 # Orchestrates the MF-VAR workflow by sourcing helper modules
 # housed under ./R/. The pipeline ingests data, estimates the
@@ -10,11 +10,21 @@ source(file.path("R", "setup.R"))
 source(file.path("R", "data_processing.R"))
 source(file.path("R", "evaluation.R"))
 source(file.path("R", "plotting.R"))
+source(file.path("R", "latent_states.R"))
 
 activate_project()
 load_required_packages(required_pkgs)
 
 variable <- step_ahead <- horizon <- lower <- median <- upper <- NULL
+
+if (identical(Sys.getenv("MFVAR_VERSION"), "alternative")) {
+  stop(
+    paste(
+      "Alternative MF-VAR specification not yet implemented on main branch.",
+      "See placeholder 'run_mfvar_alternative.R' or the dedicated feature branch."
+    )
+  )
+}
 
 # --- I/O paths ---------------------------------------------------------------
 DATA_DIR <- file.path(".", "data")
@@ -22,16 +32,28 @@ OUT_DIR  <- file.path(".", "output", "forecasts")
 if (!dir.exists(OUT_DIR)) dir.create(OUT_DIR, recursive = TRUE)
 
 # --- Data preparation -------------------------------------------------------
-# Pull the transformed quarterly series and aligned barometer input.
+# Pull the transformed quarterly series and align with monthly indicators sourced
+# from the combined SNB/KOF dataset. We keep only periods where every chosen
+# monthly series is available.
 qdat_raw <- read_quarterly_data(DATA_DIR)
-baro_raw <- fetch_kof_barometer()
-trimmed <- trim_to_overlap(qdat_raw, baro_raw)
+monthly_variables <- c("plkopr", "devkum", "amarbma", "snboffzisa")
+monthly_data <- read_combined_timeseries(DATA_DIR, variables = monthly_variables)
+
+start_quarter <- zoo::as.yearqtr(monthly_data$start_date)
+qdat_filtered <- qdat_raw |>
+  dplyr::filter(.data$qtr >= start_quarter)
+
+if (!nrow(qdat_filtered)) {
+  stop("Quarterly dataset does not contain observations after the monthly data start date.")
+}
+
+trimmed <- trim_to_overlap(qdat_filtered, monthly_data$ts_list)
 stationary <- stationarise_quarterly(trimmed$qdat)
 qdat_orig <- trimmed$qdat
 qdat_adj <- stationary$data
 transforms <- stationary$transforms
-baro_ts <- window_baro(trimmed$baro_ts, qdat_orig)
-Y <- build_Y(qdat_adj, baro_ts)
+monthly_ts <- window_monthly_series(trimmed$monthly, qdat_orig)
+Y <- build_Y(qdat_adj, monthly_ts)
 
 target_vars <- target_variables
 n_lags <- 5
@@ -39,13 +61,23 @@ n_lags <- 5
 # --- Evaluation suites ------------------------------------------------------
 # Benchmark MF-VAR forecasts against AR(2) both on a holdout window and
 # in expanding window one-step-ahead cross-validation.
-holdout_results <- run_holdout_evaluation(qdat_adj, qdat_orig, baro_ts, n_lags, target_vars, transforms, OUT_DIR)
-cv_results <- run_cross_validation(qdat_adj, qdat_orig, baro_ts, n_lags, target_vars, transforms, OUT_DIR)
+holdout_results <- run_holdout_evaluation(qdat_adj, qdat_orig, monthly_ts, n_lags, target_vars, transforms, OUT_DIR)
+cv_results <- run_cross_validation(qdat_adj, qdat_orig, monthly_ts, n_lags, target_vars, transforms, OUT_DIR)
 
 # --- Estimation and forecasting --------------------------------------------
 # Refit the MF-VAR on the full sample and produce 12 quarter-ahead forecasts
 # (sufficient to cover the 1-year horizon after aggregation).
 mod_ss <- estimate_mfvar_model(Y, n_lags, n_fcst = 12, seed = 123)
+
+latent_states_path <- NULL
+latent_states_plot <- NULL
+latent_heatmap_plot <- NULL
+if (!identical(Sys.getenv("MFVAR_EXTRACT_STATES"), "0")) {
+  latent_states <- extract_latent_states(mod_ss, summary = "mean")
+  latent_states_path <- save_latent_states_csv(latent_states, OUT_DIR)
+  latent_states_plot <- plot_latent_states(latent_states, OUT_DIR)
+  latent_heatmap_plot <- plot_latent_states(latent_states, OUT_DIR, mode = "heatmap")
+}
 
 fc <- predict(mod_ss, aggregate_fcst = TRUE, pred_bands = 0.8)
 n_obs <- nrow(qdat_adj)
@@ -288,6 +320,16 @@ if (!is.null(exch_plot_path)) {
 }
 if (!is.null(exch_context_path)) {
   message_lines <- c(message_lines, "  - output/forecasts/forecast_exchange_rate_context.png\n")
+}
+
+if (!is.null(latent_states_path)) {
+  message_lines <- c(message_lines, "  - output/forecasts/mfvar_latent_states.csv\n")
+}
+if (!is.null(latent_states_plot)) {
+  message_lines <- c(message_lines, "  - output/forecasts/mfvar_latent_states_timeseries.png\n")
+}
+if (!is.null(latent_heatmap_plot)) {
+  message_lines <- c(message_lines, "  - output/forecasts/mfvar_latent_states_heatmap.png\n")
 }
 
 message_lines <- c(

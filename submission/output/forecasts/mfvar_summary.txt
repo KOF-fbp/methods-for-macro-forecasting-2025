@@ -2,12 +2,12 @@
 ==== MF-VAR summary (Minnesota prior, IW covariance) ====
 
 Mixed-frequency BVAR with:
-4 variables (kofbarometer, gdp_growth, inflation, exch_rate)
+7 variables (plkopr, devkum, amarbma, snboffzisa, gdp_growth, inflation, exch_rate)
 Prior: minn
 
 Error covariance matrix: Inverse Wishart
 5 lags
-403 time periods (1992-03-01 - 2025-09-01)
+291 time periods (2000-01-01 - 2024-03-01)
 12 periods forecast
 4000 draws used in main chain
 NULL
@@ -17,31 +17,31 @@ NULL
 Holdout horizon: 4 quarter(s).
 
 # A tibble: 9 × 4
-  variable   model       rmse     mae
-  <chr>      <chr>      <dbl>   <dbl>
-1 exch_rate  AR(2)    0.0103  0.00910
-2 exch_rate  MF-VAR   0.00996 0.00725
-3 exch_rate  RW-trend 0.00636 0.00521
-4 gdp_growth AR(2)    1.65    1.33   
-5 gdp_growth MF-VAR   0.628   0.628  
-6 gdp_growth RW-trend 1.47    1.24   
-7 inflation  AR(2)    0.307   0.301  
-8 inflation  MF-VAR   0.175   0.163  
-9 inflation  RW-trend 0.350   0.222  
+  variable   model      rmse    mae
+  <chr>      <chr>     <dbl>  <dbl>
+1 exch_rate  AR(2)    0.0288 0.0280
+2 exch_rate  MF-VAR   0.0123 0.0122
+3 exch_rate  RW-trend 0.0202 0.0192
+4 gdp_growth AR(2)    2.70   2.37  
+5 gdp_growth MF-VAR   0.792  0.790 
+6 gdp_growth RW-trend 3.24   2.61  
+7 inflation  AR(2)    0.731  0.560 
+8 inflation  MF-VAR   1.92   1.61  
+9 inflation  RW-trend 2.10   2.07  
 
-==== Rolling 1-step cross-validation ====
+==== Expanding window 1-step cross-validation ====
 
-Folds: 125 (last 127 quarter(s)).
+Folds: 82 (last 90 quarter(s)).
 
 # A tibble: 9 × 4
   variable   model      rmse    mae
   <chr>      <chr>     <dbl>  <dbl>
-1 exch_rate  AR(2)    0.0231 0.0169
-2 exch_rate  MF-VAR   0.0217 0.0152
-3 exch_rate  RW-trend 0.0222 0.0151
-4 gdp_growth AR(2)    4.73   2.42  
-5 gdp_growth MF-VAR   6.43   2.95  
-6 gdp_growth RW-trend 6.53   2.93  
-7 inflation  AR(2)    1.11   0.864 
-8 inflation  MF-VAR   1.24   0.969 
-9 inflation  RW-trend 1.27   0.984 
+1 exch_rate  AR(2)    0.0255 0.0187
+2 exch_rate  MF-VAR   0.0235 0.0163
+3 exch_rate  RW-trend 0.0241 0.0157
+4 gdp_growth AR(2)    4.82   2.64  
+5 gdp_growth MF-VAR   7.34   3.36  
+6 gdp_growth RW-trend 7.51   3.13  
+7 inflation  AR(2)    1.22   0.942 
+8 inflation  MF-VAR   1.29   0.996 
+9 inflation  RW-trend 1.31   1.02  
