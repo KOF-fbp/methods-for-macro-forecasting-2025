@@ -130,6 +130,52 @@ coverage_label <- function(extra_months) {
   )
 }
 
+collect_forecast_tbl <- function(target_vars, horizon_steps, model_label, generator_fn, warn_context = NULL, warn_on_all_na = TRUE) {
+  purrr::map_dfr(target_vars, function(var) {
+    preds <- generator_fn(var)
+    if (!length(preds)) {
+      preds <- rep(NA_real_, length(horizon_steps))
+    }
+    if (length(preds) != length(horizon_steps)) {
+      warning(sprintf("%s for %s returned %d values (expected %d)%s",
+        model_label,
+        var,
+        length(preds),
+        length(horizon_steps),
+        if (!is.null(warn_context)) paste0(" ", warn_context) else ""
+      ), call. = FALSE)
+      preds <- rep(NA_real_, length(horizon_steps))
+    }
+    if (warn_on_all_na && all(is.na(preds))) {
+      warning(sprintf("%s for %s returned all NAs%s",
+        model_label,
+        var,
+        if (!is.null(warn_context)) paste0(" ", warn_context) else ""
+      ), call. = FALSE)
+    }
+    tibble::tibble(
+      variable = var,
+      step_ahead = horizon_steps,
+      prediction = preds,
+      model = model_label
+    )
+  })
+}
+
+run_forecaster_with_timing <- function(target_vars, horizon_steps, model_label, generator_fn, warn_context = NULL, warn_on_all_na = TRUE) {
+  timed <- measure_elapsed({
+    collect_forecast_tbl(
+      target_vars = target_vars,
+      horizon_steps = horizon_steps,
+      model_label = model_label,
+      generator_fn = generator_fn,
+      warn_context = warn_context,
+      warn_on_all_na = warn_on_all_na
+    )
+  })
+  list(predictions = timed$result, elapsed = timed$elapsed)
+}
+
 forecast_mfvar <- function(q_train_adj, monthly_train, transforms, n_lags, horizon_quarters, target_vars, seed = 123L, return_model = FALSE, extract_states = FALSE) {
   Y_train <- build_Y(q_train_adj, monthly_train)
   mod <- tryCatch(
@@ -570,7 +616,8 @@ run_benchmark_cross_validation <- function(
 
     for (extra_idx in seq_along(extra_months_options)) {
       extra_months <- extra_months_options[extra_idx]
-      
+      warn_suffix <- sprintf("at fold %s (%s)", cutoff_label, coverage_label(extra_months))
+
       # For MF-VAR: trim monthly indicators to training period + extra_months
       train_last_qtr_cv <- q_train_orig$qtr[nrow(q_train_orig)]
       baro_end <- add_months(quarter_to_month_end(train_last_qtr_cv), extra_months)
@@ -612,9 +659,12 @@ run_benchmark_cross_validation <- function(
       }
       x_future_ts <- stats::ts(x_future_vec, start = future_start, frequency = 12)
 
-      midas_trend_eval <- measure_elapsed({
-        purrr::map_dfr(target_vars, function(var) {
-          preds <- forecast_midas_series(
+      midas_trend_eval <- run_forecaster_with_timing(
+        target_vars = target_vars,
+        horizon_steps = horizon_steps,
+        model_label = "MIDAS (trend)",
+        generator_fn = function(var) {
+          forecast_midas_series(
             y_series = y_ts_list[[var]],
             train_rows = train_rows,
             x_train_full = x_train_full,
@@ -622,18 +672,18 @@ run_benchmark_cross_validation <- function(
             horizon = horizon_max,
             include_trend = TRUE
           )
-          if (all(is.na(preds))) {
-            warning(sprintf("MIDAS (trend) for %s returned all NAs at fold %s", var, cutoff_label))
-          }
-          tibble::tibble(variable = var, step_ahead = horizon_steps, prediction = preds, model = "MIDAS (trend)")
-        })
-      })
-      midas_trend_pred <- midas_trend_eval$result
+        },
+        warn_context = warn_suffix
+      )
+      midas_trend_pred <- midas_trend_eval$predictions
       midas_kof_elapsed <- midas_kof_elapsed + midas_trend_eval$elapsed
 
-      midas_simple_eval <- measure_elapsed({
-        purrr::map_dfr(target_vars, function(var) {
-          preds <- forecast_midas_series(
+      midas_simple_eval <- run_forecaster_with_timing(
+        target_vars = target_vars,
+        horizon_steps = horizon_steps,
+        model_label = "MIDAS",
+        generator_fn = function(var) {
+          forecast_midas_series(
             y_series = y_ts_list[[var]],
             train_rows = train_rows,
             x_train_full = x_train_full,
@@ -641,19 +691,19 @@ run_benchmark_cross_validation <- function(
             horizon = horizon_max,
             include_trend = FALSE
           )
-          if (all(is.na(preds))) {
-            warning(sprintf("MIDAS (no trend) for %s returned all NAs at fold %s", var, cutoff_label))
-          }
-          tibble::tibble(variable = var, step_ahead = horizon_steps, prediction = preds, model = "MIDAS")
-        })
-      })
-      midas_simple_pred <- midas_simple_eval$result
+        },
+        warn_context = warn_suffix
+      )
+      midas_simple_pred <- midas_simple_eval$predictions
       midas_kof_elapsed <- midas_kof_elapsed + midas_simple_eval$elapsed
 
       # MIDAS using MF-VAR latent states as monthly regressor
-      midas_latent_trend_eval <- measure_elapsed({
-        purrr::map_dfr(target_vars, function(var) {
-          preds <- forecast_midas_latent(
+      midas_latent_trend_eval <- run_forecaster_with_timing(
+        target_vars = target_vars,
+        horizon_steps = horizon_steps,
+        model_label = "MIDAS-Latent (trend)",
+        generator_fn = function(var) {
+          forecast_midas_latent(
             y_series = y_ts_list[[var]],
             train_rows = train_rows,
             latent_states_df = latent_states_fold,
@@ -661,18 +711,18 @@ run_benchmark_cross_validation <- function(
             horizon = horizon_max,
             include_trend = TRUE
           )
-          if (all(is.na(preds))) {
-            warning(sprintf("MIDAS-Latent (trend) for %s returned all NAs at fold %s", var, cutoff_label))
-          }
-          tibble::tibble(variable = var, step_ahead = horizon_steps, prediction = preds, model = "MIDAS-Latent (trend)")
-        })
-      })
-      midas_latent_trend_pred <- midas_latent_trend_eval$result
+        },
+        warn_context = warn_suffix
+      )
+      midas_latent_trend_pred <- midas_latent_trend_eval$predictions
       midas_latent_elapsed <- midas_latent_elapsed + midas_latent_trend_eval$elapsed
 
-      midas_latent_simple_eval <- measure_elapsed({
-        purrr::map_dfr(target_vars, function(var) {
-          preds <- forecast_midas_latent(
+      midas_latent_simple_eval <- run_forecaster_with_timing(
+        target_vars = target_vars,
+        horizon_steps = horizon_steps,
+        model_label = "MIDAS-Latent",
+        generator_fn = function(var) {
+          forecast_midas_latent(
             y_series = y_ts_list[[var]],
             train_rows = train_rows,
             latent_states_df = latent_states_fold,
@@ -680,13 +730,10 @@ run_benchmark_cross_validation <- function(
             horizon = horizon_max,
             include_trend = FALSE
           )
-          if (all(is.na(preds))) {
-            warning(sprintf("MIDAS-Latent (no trend) for %s returned all NAs at fold %s", var, cutoff_label))
-          }
-          tibble::tibble(variable = var, step_ahead = horizon_steps, prediction = preds, model = "MIDAS-Latent")
-        })
-      })
-      midas_latent_simple_pred <- midas_latent_simple_eval$result
+        },
+        warn_context = warn_suffix
+      )
+      midas_latent_simple_pred <- midas_latent_simple_eval$predictions
       midas_latent_elapsed <- midas_latent_elapsed + midas_latent_simple_eval$elapsed
 
       fold_predictions[[extra_idx]] <- dplyr::bind_rows(
@@ -956,53 +1003,73 @@ ar_holdout <- purrr::map_dfr(target_vars, function(var) {
   )
 })
 
-midas_trend_holdout <- purrr::map_dfr(target_vars, function(var) {
-  preds <- forecast_midas_series(
-    y_ts_list[[var]],
-    train_rows,
-    x_train_full,
-    x_future_full,
-    eval_horizon,
-    include_trend = TRUE
-  )
-  tibble::tibble(variable = var, step_ahead = seq_len(eval_horizon), prediction = preds, model = "MIDAS (trend)")
-})
+midas_trend_holdout <- collect_forecast_tbl(
+  target_vars = target_vars,
+  horizon_steps = seq_len(eval_horizon),
+  model_label = "MIDAS (trend)",
+  generator_fn = function(var) {
+    forecast_midas_series(
+      y_series = y_ts_list[[var]],
+      train_rows = train_rows,
+      x_train_full = x_train_full,
+      x_future_full = x_future_full,
+      horizon = eval_horizon,
+      include_trend = TRUE
+    )
+  },
+  warn_context = "during holdout"
+)
 
-midas_simple_holdout <- purrr::map_dfr(target_vars, function(var) {
-  preds <- forecast_midas_series(
-    y_ts_list[[var]],
-    train_rows,
-    x_train_full,
-    x_future_full,
-    eval_horizon,
-    include_trend = FALSE
-  )
-  tibble::tibble(variable = var, step_ahead = seq_len(eval_horizon), prediction = preds, model = "MIDAS")
-})
+midas_simple_holdout <- collect_forecast_tbl(
+  target_vars = target_vars,
+  horizon_steps = seq_len(eval_horizon),
+  model_label = "MIDAS",
+  generator_fn = function(var) {
+    forecast_midas_series(
+      y_series = y_ts_list[[var]],
+      train_rows = train_rows,
+      x_train_full = x_train_full,
+      x_future_full = x_future_full,
+      horizon = eval_horizon,
+      include_trend = FALSE
+    )
+  },
+  warn_context = "during holdout"
+)
 
-midas_latent_trend_holdout <- purrr::map_dfr(target_vars, function(var) {
-  preds <- forecast_midas_latent(
-    y_ts_list[[var]],
-    train_rows,
-    latent_states_holdout,
-    var,
-    eval_horizon,
-    include_trend = TRUE
-  )
-  tibble::tibble(variable = var, step_ahead = seq_len(eval_horizon), prediction = preds, model = "MIDAS-Latent (trend)")
-})
+midas_latent_trend_holdout <- collect_forecast_tbl(
+  target_vars = target_vars,
+  horizon_steps = seq_len(eval_horizon),
+  model_label = "MIDAS-Latent (trend)",
+  generator_fn = function(var) {
+    forecast_midas_latent(
+      y_series = y_ts_list[[var]],
+      train_rows = train_rows,
+      latent_states_df = latent_states_holdout,
+      variable_name = var,
+      horizon = eval_horizon,
+      include_trend = TRUE
+    )
+  },
+  warn_context = "during holdout"
+)
 
-midas_latent_simple_holdout <- purrr::map_dfr(target_vars, function(var) {
-  preds <- forecast_midas_latent(
-    y_ts_list[[var]],
-    train_rows,
-    latent_states_holdout,
-    var,
-    eval_horizon,
-    include_trend = FALSE
-  )
-  tibble::tibble(variable = var, step_ahead = seq_len(eval_horizon), prediction = preds, model = "MIDAS-Latent")
-})
+midas_latent_simple_holdout <- collect_forecast_tbl(
+  target_vars = target_vars,
+  horizon_steps = seq_len(eval_horizon),
+  model_label = "MIDAS-Latent",
+  generator_fn = function(var) {
+    forecast_midas_latent(
+      y_series = y_ts_list[[var]],
+      train_rows = train_rows,
+      latent_states_df = latent_states_holdout,
+      variable_name = var,
+      horizon = eval_horizon,
+      include_trend = FALSE
+    )
+  },
+  warn_context = "during holdout"
+)
 
 # --- Gather predictions ----------------------------------------------------
 predictions_tbl <- dplyr::bind_rows(
