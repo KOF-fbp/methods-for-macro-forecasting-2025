@@ -1,3 +1,4 @@
+renv::status()
 # in this file, we will test BVAR model with different priors, selected
 #variables and lags to compute the RMSE in each case.
 

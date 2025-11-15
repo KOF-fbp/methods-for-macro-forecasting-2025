@@ -1,3 +1,4 @@
+renv::status()
 #--------------------- libraries ---------------------#
 
 library(ggplot2)
