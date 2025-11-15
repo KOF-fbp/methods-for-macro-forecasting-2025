@@ -10,9 +10,10 @@ library(dplyr)
 library(tidyr)
 library(BVAR)
 library(lubridate)
-library(vars)  # needed for classical VAR benchmark
+library(vars)  
+library(forecast)
+library(tseries)
 
-source("stationary.R")
 # --------------------- set up ------------------------#
 # set seed for reproducibility
 set.seed(42)
@@ -21,106 +22,54 @@ set.seed(42)
 df <- utils::read.csv("data/data_quarterly.csv")
 
 df$date <- as.Date(paste0(df$date, "-01")) # format date
-df <- df %>% filter(date <= as.Date("2025-07-01")) # until 01.10.2025
-
+df <- df %>% filter(date <= as.Date("2019-01-01")) # until 01.10.2025
+df <- df %>% filter(date <= as.Date("2025-10-01")) 
 # inflate CPI to get inflation rate
-df$inflation <- 100*(df$cpi - dplyr::lag(df$cpi, 1)) / dplyr::lag(df$cpi, 1) 
+df$inflation <- ((df$cpi - dplyr::lag(df$cpi, 1)) / dplyr::lag(df$cpi, 1) ) * 100
 df <- df %>% filter(!is.na(inflation)) #remove first NA row
 
-# gdp growth instead of gdp
-df$gdp <- log(df$gdp)
 # -------------------- apply log + growth transformations --------------------
-# define the rate variables (do NOT log-transform these)
 rate_variables <- c("inflation", "urilo", "srate", "srate_ge")
+forecast_variables <- c("gdp", "inflation", "wkfreuro")
 
-# safe log: add small offset if non-positive values present
-#safe_log <- function(x, tiny = 1e-6) {
-#  x_num <- as.numeric(x)
-#  if (all(is.na(x_num))) return(x_num)
-#  if (any(x_num <= 0, na.rm = TRUE)) {
-#    offset <- abs(min(x_num, na.rm = TRUE)) + tiny
-#    warning("Non-positive values found; adding offset = ", signif(offset, 6), " before log.")
-#    x_num <- x_num + offset
-#  }
-#  return(log(x_num))
-#}
-
-# apply log to non-rate variables (excluding date)
-# (var in names(df)) {
-#  if (!(var %in% rate_variables) && var != "date") {
-#    df[[var]] <- safe_log(df[[var]])
-#  }
-#}
-
-# convert to growth rates (percent) for the same non-rate variables
+# difference in difference
 for (var in names(df)) {
   if (!(var %in% rate_variables) && var != "date") {
-    df[[var]] <-  (df[[var]] - dplyr::lag(df[[var]], 1))
+    df[[var]] <-  (log(df[[var]]) - log(dplyr::lag(df[[var]], 1))) *100
   }
 }
 
-# remove initial rows with NA introduced by growth calculation if needed
-# (subsequent code already removes rows with NA in gdp)
-
-#check if stationary using functions from stationary.R
-#for (var in setdiff(colnames(df), "date")) {  # excluding date column
-#  cat("Checking stationarity for:", var, "\n")
-#  ts_data <- ts(df[[var]])
-#  stationary_ts <- make_stationary(ts_data, use_log = TRUE)   # returns aligned vector (same length)
-#  df[[var]] <- as.numeric(stationary_ts)                     # assign directly, no extra NA
-#}
 df <- df %>% filter(!is.na(gdp))  # remove first row with NA
-
 # ---------------------- lags ---------------------#
 
 # possible lags: 1, 4 (one year), 8 (two years)
 lags <- c(1,4)
-
 # ------------------ selected variables ------------------#
 
 #selected variables for BVAR model
 
 selected_variables_0 <- c("gdp", "inflation", "wkfreuro")
 #"consp"
-selected_variables_1 <- c("gdp", "inflation", "wkfreuro", "consg", 
-                          #"ifix", "icnstr", #"ime", #"exc1", #"imc1", 
-                          "ltot", #"uroff",
-                          "wage", 
-                          #"srate",
-                          "poilusd", "pcioecd")#, #"vaabcde", #"vaghji")
+selected_variables_1 <- c("gdp", "inflation", "wkfreuro", "consg",  "ltot", 
+                          "wage","poilusd", "pcioecd")
 
 #from this initial set, we will also try a smaller set of variables
 
-#selected_variables_2 <- c("gdp", "inflation", "wkfreuro", "consg", "ifix", 
-#                          "exc1", "imc1", "ltot", "uroff", "wage", #"srate", 
-#                          "poilusd", "pcioecd")
+selected_variables_2 <- c("gdp", "inflation", "wkfreuro", "consg", "ifix", 
+                        "exc1", "imc1", "ltot", "uroff", "wage", "srate", 
+                          "poilusd", "pcioecd")
 
 #selected_variables_3 <- c("gdp", "inflation", "wkfreuro", "exc1", "ltot",
 #                         "wage")#, "srate")
 
-
-# just for checkig the variables
-#for (var in selected_variables_1) {
-#  plot_data <- data.frame(
-#    date = df$date,
-#    value = df[[var]]
-#  )
-#  
-#  p <- ggplot(plot_data, aes(x = date, y = value)) +
-#    geom_line() +
-#    labs(title = paste("Time Series of", var),
-#         y = var) +
-#    theme_bw()
-#  print(p)
-#}
 #-------------------------------------------------------------------
 # List of variable sets to test
 variable_sets <- list(
   set_0 = selected_variables_0,
-  set_1 = selected_variables_1#,
-  #set_2 = selected_variables_2,
-  #set_3 = selected_variables_3
+  set_1 = selected_variables_1,
+  set_2 = selected_variables_2
 )
+
 
 #--------------------- priors ---------------------#
 # Define different prior configurations to test
@@ -130,22 +79,7 @@ mn <- bv_minnesota(
 )
 
 soc <- bv_soc(mode = 1, sd = 0.5)   # shrink sum of AR coeffs to 1, with variance
-priors <- bv_priors(
-  hyper = c("lambda", "alpha", "psi"),
-  mn = mn,
-  soc = soc
-)
 
-# Diffuse (flat) prior: approssimazione per OLS usando Minnesota con lambda molto piccolo
-diffuse_prior_bv <- bv_priors(
-  hyper = c("lambda", "alpha"),
-  mn = bv_minnesota(
-    lambda = bv_lambda(mode = 1e-6, sd = 1e-6, min = 1e-12, max = 1),
-    alpha  = bv_alpha(mode = 4)
-  )
-)
-
-# Prior basati su componenti già definiti (mn e soc)
 mn_prior_bv <- bv_priors(
   hyper = c("lambda", "alpha"),
   mn = mn
@@ -157,14 +91,12 @@ soc_prior_bv <- bv_priors(
   soc = soc
 )
 
-# Lista di prior pronta per essere passata a BVAR::bvar
-prior_configs <- list(
+prior_configs <- list( # list of priors
   mn      = mn_prior_bv,
-  soc     = soc_prior_bv,
-  diffuse = diffuse_prior_bv
+  soc     = soc_prior_bv#,
 )
 
-rolling_window_size <- 110  # e.g., 40 quarters (10 years)
+rolling_window_size <- 40  # e.g., 40 quarters (10 years)
 
 #---------------------- end of setup ---------------------#
 
@@ -285,3 +217,23 @@ results_df
 # save results to the output folder
 save(results_df, file = "output/results_df.RData")
 
+
+# displaying results a bit differently
+
+results_long <- results_df %>%
+  pivot_longer(
+    cols = starts_with("rmse"),     
+    names_to = "forecasted_variable",  
+    names_prefix = "RMSE_",            
+    values_to = "RMSE_value"        
+  )
+
+# sort by name of variable
+results_long <- results_long %>%
+  arrange(forecasted_variable)
+print(results_long)
+
+results_sorted_structured <- results_long %>%
+  arrange(variable, variable_set, lags, prior)
+
+print(results_sorted_structured, n = 40)
