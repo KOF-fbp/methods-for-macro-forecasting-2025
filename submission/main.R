@@ -105,21 +105,13 @@ data <- df
 n_obs <- nrow(data)
 
 # for each quantity we build a matrix to save results
-# building a matrix to save results of q50
+# building a matrix to save results 
 pred_q50 <- matrix(NA_real_, nrow = n_obs, ncol = length(selected_variables),
-                   dimnames = list(NULL, selected_variables))
-# building a matrix to save results of q16
-pred_q16 <- matrix(NA_real_, nrow = n_obs, ncol = length(selected_variables),
-                   dimnames = list(NULL, selected_variables))
-# building a matrix to save results of q84
-pred_q84 <- matrix(NA_real_, nrow = n_obs, ncol = length(selected_variables),
-                   dimnames = list(NULL, selected_variables))
-# building a matrix to save results of q025
-pred_q025 <- matrix(NA_real_, nrow = n_obs, ncol = length(selected_variables),
-                   dimnames = list(NULL, selected_variables))
-# building a matrix to save results of q975
-pred_q975 <- matrix(NA_real_, nrow = n_obs, ncol = length(selected_variables),
-                   dimnames = list(NULL, selected_variables))
+                   dimnames = list(NULL, selected_variables))6
+pred_q16 <- pred_q50
+pred_q84 <- pred_q50
+pred_q025 <- pred_q50
+pred_q975 <- pred_q50
 
 # check all for stationarity
 for (var in selected_variables) {
@@ -147,14 +139,13 @@ priors <- bv_priors(
 
 # ------------------------- rolling window -----------------------------
 for (i in seq(from = window_size + lag_number, to = n_obs - horizon)) {
+  
   print(i)
   train_start <- i - window_size + 1
   train_end <- i
   
-  # select the data for the rolling window
   y_train <- data[train_start:train_end, ]
-  
-  # fitting model
+
   trained_model <- bvar(
     y_train %>% dplyr::select(all_of(selected_variables)),
     lags = lag_number,
@@ -164,13 +155,33 @@ for (i in seq(from = window_size + lag_number, to = n_obs - horizon)) {
     priors = priors,
     verbose = FALSE
   )
+
+  prediction_draws <- predict(trained_model, horizon = horizon)
+
+  t_idx <- i + horizon
+  y_actual_vector <- data[t_idx, selected_variables, drop = TRUE]
   
-  prediction <- predict(trained_model, horizon = horizon, conf_bands = c(0.16, 0.025))
-  pred_q50[i+horizon, ] <- prediction$quants["50%", horizon,]
-  pred_q16[i+horizon, ] <- prediction$quants["16%", horizon,]
-  pred_q84[i+horizon, ] <- prediction$quants["84%",horizon,]
-  pred_q025[i+horizon, ] <- prediction$quants["2.5%", horizon,]
-  pred_q975[i+horizon, ] <- prediction$quants["97.5%", horizon,]
+  for (j in 1:length(selected_variables)) {
+    
+    var_name <- selected_variables[j]
+    var_draws <-prediction_draws$f[, horizon, j]
+    y_actual_scalar <- y_actual_vector[j]
+
+    quants <- quantile(var_draws, probs = c(0.025, 0.16, 0.50, 0.84, 0.975), na.rm = TRUE)
+    
+    # quantiles
+    pred_q50[t_idx, var_name]  <- quants["50%"]
+    pred_q16[t_idx, var_name]  <- quants["16%"]
+    pred_q84[t_idx, var_name]  <- quants["84%"]
+    pred_q025[t_idx, var_name] <- quants["2.5%"]
+    pred_q975[t_idx, var_name] <- quants["97.5%"]
+    
+    # Calculate and store the log score
+    density_obj <- density(var_draws)
+    density_func <- approxfun(density_obj$x, density_obj$y)
+    p <- density_func(y_actual_scalar)
+    log_score_bvar[t_idx, var_name] <- log(p) 
+  }
 }
 
 for (i in seq_along(forecast_variables)) {
@@ -184,6 +195,9 @@ for (i in seq_along(forecast_variables)) {
   
   cat("RMSE for", var, ":", rmse, "\n")
   cat("MAE for", var, ":", mae, "\n", "\n")
+
+  mean_log_score <- mean(log_score_bvar[valid_indices, var], na.rm = TRUE)
+  cat("Mean Log Score for", var, ":", mean_log_score, "\n\n")
   
 }
 
@@ -355,6 +369,7 @@ pred_q16_ar1  <- pred_q50_ar1
 pred_q84_ar1  <- pred_q50_ar1
 pred_q025_ar1 <- pred_q50_ar1
 pred_q975_ar1 <- pred_q50_ar1
+log_score_ar1 <- pred_q50_ar1
 
 # rolling window forecast with AR(1)
 for (var in forecast_variables) {
@@ -370,9 +385,21 @@ for (var in forecast_variables) {
     # extract quantiles
     idx68 <- match(68, fc$level)
     idx95 <- match(95, fc$level)
+
+    t_idx <- i + horizon
+
+    # log score 
+    
+    fc_mean <- as.numeric(fc$mean[horizon])
+    y_actual <- data[t_idx, var, drop = TRUE]
+    fc_sd <- (fc$upper[horizon, idx95] - fc_mean) / qnorm(0.975)
+
+    log_score_ar1[t_idx, var] <- dnorm(y_actual, 
+                                         mean = fc_mean, 
+                                         sd = fc_sd, 
+                                         log = TRUE)
     
     #save forecasts
-    t_idx <- i + horizon
     pred_q50_ar1[t_idx, var]  <- as.numeric(fc$mean[horizon])     # median ≈ mean for Gaussian ARIMA
     pred_q16_ar1[t_idx, var]  <- fc$lower[horizon, idx68]         # ~16th
     pred_q84_ar1[t_idx, var]  <- fc$upper[horizon, idx68]         # ~84th
@@ -391,6 +418,8 @@ for (i in seq_along(forecast_variables)) {
   mae  <- mean(abs(pred_q50_ar1[valid_indices, var] - data[valid_indices, var]))
   cat("RMSE for", var, ":", rmse, "\n")
   cat("MAE for", var, ":", mae, "\n\n")
+  mean_log_score <- mean(log_score_ar1[valid_indices, var], na.rm = TRUE)
+  cat("Mean Log Score for", var, ":", mean_log_score, "\n\n")
 }
 
 library(patchwork)
@@ -499,3 +528,136 @@ saveRDS(results, file = "output/rmse_comparison_horizon1.rds")
 write.csv(results, file = "output/rmse_comparison_horizon1.csv", row.names = FALSE)
 
 
+# current forecasts -------------------------
+
+df_fc <- utils::read.csv("data/data_quarterly.csv")
+
+window_size <- 40
+horizon <- 4
+lag_number <- 1
+
+df_fc$date <- as.Date(paste0(df_fc$date, "-01"))
+df_fc <- df_fc %>% filter(date <= as.Date("2025-10-01")) 
+
+df_fc$inflation <- ((df_fc$cpi - dplyr::lag(df_fc$cpi, 1)) / dplyr::lag(df_fc$cpi, 1) ) * 100
+df_fc <- df_fc %>% filter(!is.na(inflation))
+
+for (var in names(df_fc)) {
+  if (!(var %in% rate_variables) && var != "date") {
+    df_fc[[var]] <-  (log(df_fc[[var]]) - log(dplyr::lag(df_fc[[var]], 1))) *100
+  }
+}
+
+df_fc <- df_fc %>% filter(!is.na(gdp)) 
+
+window_data <- df_fc[(nrow(df_fc)-40):nrow(df_fc), ]
+
+# set priors -------------
+mn <- bv_minnesota(
+  lambda = bv_lambda(mode = 0.5, sd = 0.5, min = 0.001, max = 5),
+  alpha  = bv_alpha(mode = 4),
+  psi = bv_psi()
+)
+
+soc <- bv_soc(mode = 1, sd = 0.5)  
+
+priors <- bv_priors(
+  hyper = c("lambda", "alpha", "psi"),
+  mn = mn
+)   
+
+horizon <- 4
+y_train <- window_data
+
+# fitting model- ------------------------------------------------
+trained_model <- bvar(
+  y_train %>% dplyr::select(all_of(selected_variables)),
+  lags = lag_number,
+  n_draw = 10000,
+  n_burn = 2500,
+  n_thin = 1,
+  priors = priors,
+  verbose = FALSE
+)
+
+n_obs <- nrow(df_fc) + horizon  
+
+pred_q50  <- matrix(NA_real_, nrow = n_obs, ncol = length(selected_variables),
+                    dimnames = list(NULL, selected_variables))
+pred_q16  <- pred_q50
+pred_q84  <- pred_q50
+pred_q025 <- pred_q50
+pred_q975 <- pred_q50
+
+# --- model prediction ---------------------------------------------------------
+prediction <- predict(trained_model, horizon = horizon, conf_bands = c(0.16, 0.025))
+
+for (h in 1:horizon) {
+  row_idx <- nrow(df_fc) + h
+  pred_q50[row_idx,  ] <- prediction$quants["50%",  h, ]
+  pred_q16[row_idx,  ] <- prediction$quants["16%",  h, ]
+  pred_q84[row_idx,  ] <- prediction$quants["84%",  h, ]
+  pred_q025[row_idx, ] <- prediction$quants["2.5%", h, ]
+  pred_q975[row_idx, ] <- prediction$quants["97.5%",h, ]
+}
+
+# --- build a proper future date index ----------------------------------------
+step <- diff(tail(df_fc$date, 2))[1]
+if (is.na(step) || step <= 0) step <- stats::median(diff(df_fc$date))
+future_dates <- seq(from = max(df_fc$date) + step, by = step, length.out = horizon)
+date_all <- c(df_fc$date, future_dates)
+
+# --- plotting ----------------------------------------------------------------
+plots <- list()
+forecast_start <- nrow(df_fc) + 1
+
+for (var in selected_variables) {
+  start_slice <- max(1, forecast_start - 4)
+  df_actual <- data.frame(date = df_fc$date, actual = df_fc[[var]]) |>
+    dplyr::slice(start_slice:dplyr::n())
+
+  keep <- (forecast_start - 1):n_obs
+  df_forecast <- data.frame(
+    date      = date_all[keep],
+    predicted = pred_q50[ keep, var],
+    lower1    = pred_q16[ keep, var],
+    upper1    = pred_q84[ keep, var],
+    lower2    = pred_q025[keep, var],
+    upper2    = pred_q975[keep, var]
+  )
+
+  df_forecast[1, c("predicted","lower1","upper1","lower2","upper2")] <- df_fc[[var]][forecast_start - 1]
+  
+  plot <- ggplot() +
+    geom_ribbon(
+      data = df_forecast,
+      aes(x = date, ymin = lower2, ymax = upper2),
+      fill = "blue", alpha = 0.2
+    ) +
+    geom_ribbon(
+      data = df_forecast,
+      aes(x = date, ymin = lower1, ymax = upper1),
+      fill = "lightblue", alpha = 0.4
+    ) +
+    geom_line(
+      data = df_actual,
+      aes(x = date, y = actual),
+      color = "gray", size = 0.9
+    ) +
+    geom_line(
+      data = df_forecast,
+      aes(x = date, y = predicted),
+      color = "red", size = 1
+    ) +
+    labs(title = "", x = "Date", y = var) +
+    theme_bw() +
+    theme(
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+      panel.grid.minor = element_blank()
+    )
+  
+  plots[[var]] <- plot
+}
+
+combined_plot <- patchwork::wrap_plots(plots, ncol = 1)
+combined_plot
