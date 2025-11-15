@@ -107,7 +107,7 @@ n_obs <- nrow(data)
 # for each quantity we build a matrix to save results
 # building a matrix to save results 
 pred_q50 <- matrix(NA_real_, nrow = n_obs, ncol = length(selected_variables),
-                   dimnames = list(NULL, selected_variables))6
+                   dimnames = list(NULL, selected_variables))
 pred_q16 <- pred_q50
 pred_q84 <- pred_q50
 pred_q025 <- pred_q50
@@ -176,6 +176,9 @@ for (i in seq(from = window_size + lag_number, to = n_obs - horizon)) {
     pred_q025[t_idx, var_name] <- quants["2.5%"]
     pred_q975[t_idx, var_name] <- quants["97.5%"]
     
+    log_score_bvar <- pred_q50
+    
+
     # Calculate and store the log score
     density_obj <- density(var_draws)
     density_func <- approxfun(density_obj$x, density_obj$y)
@@ -528,8 +531,8 @@ saveRDS(results, file = "output/rmse_comparison_horizon1.rds")
 write.csv(results, file = "output/rmse_comparison_horizon1.csv", row.names = FALSE)
 
 
-# current forecasts -------------------------
-
+#------------------- current forecasts -------------------------
+# reload and re-clean data including up to 2025-10-01
 df_fc <- utils::read.csv("data/data_quarterly.csv")
 
 window_size <- 40
@@ -554,12 +557,12 @@ window_data <- df_fc[(nrow(df_fc)-40):nrow(df_fc), ]
 
 # set priors -------------
 mn <- bv_minnesota(
-  lambda = bv_lambda(mode = 0.5, sd = 0.5, min = 0.001, max = 5),
+  lambda = bv_lambda(mode = mn_mode, sd = mn_sd, min = mn_min, max = mn_max),
   alpha  = bv_alpha(mode = 4),
   psi = bv_psi()
 )
 
-soc <- bv_soc(mode = 1, sd = 0.5)  
+soc <- bv_soc(mode = soc_mode, sd = soc_sd)  
 
 priors <- bv_priors(
   hyper = c("lambda", "alpha", "psi"),
@@ -569,7 +572,7 @@ priors <- bv_priors(
 horizon <- 4
 y_train <- window_data
 
-# fitting model- ------------------------------------------------
+# --------------------- fitting model- ------------------------------------------------
 trained_model <- bvar(
   y_train %>% dplyr::select(all_of(selected_variables)),
   lags = lag_number,
@@ -589,7 +592,7 @@ pred_q84  <- pred_q50
 pred_q025 <- pred_q50
 pred_q975 <- pred_q50
 
-# --- model prediction ---------------------------------------------------------
+# --- model prediction with BVAR ---------------------------------------------------------
 prediction <- predict(trained_model, horizon = horizon, conf_bands = c(0.16, 0.025))
 
 for (h in 1:horizon) {
@@ -626,6 +629,8 @@ for (var in selected_variables) {
     upper2    = pred_q975[keep, var]
   )
 
+
+
   df_forecast[1, c("predicted","lower1","upper1","lower2","upper2")] <- df_fc[[var]][forecast_start - 1]
   
   plot <- ggplot() +
@@ -661,3 +666,15 @@ for (var in selected_variables) {
 
 combined_plot <- patchwork::wrap_plots(plots, ncol = 1)
 combined_plot
+
+
+# daframe with h=4 forecasts
+df_h4_forecast <- data.frame(
+  gdp = pred_q50[(nrow(df_fc) + 1):(nrow(df_fc) + 4), "gdp"],
+  inflation = pred_q50[(nrow(df_fc) + 1):(nrow(df_fc) + 4), "inflation"],
+  wkfreuro = pred_q50[(nrow(df_fc) + 1):(nrow(df_fc) + 4), "wkfreuro"]
+)
+
+
+# export forecasts
+write.csv(df_h4_forecast, file = "output/h4_forecast.csv", row.names = FALSE)
