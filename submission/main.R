@@ -499,27 +499,3 @@ saveRDS(results, file = "output/rmse_comparison_horizon1.rds")
 write.csv(results, file = "output/rmse_comparison_horizon1.csv", row.names = FALSE)
 
 
-### ---------- combined predictions -----------------------------
-# Combine predictions into one data frame
-combined_predictions <- data.frame(
-  date = df$date,  # Use the original dates
-  actual_gdp = data$gdp,
-  actual_inflation = data$inflation,
-  actual_wkfreuro = data$wkfreuro,
-  bvar_gdp = pred_q50[, "gdp"],
-  bvar_inflation = pred_q50[, "inflation"],
-  bvar_wkfreuro = pred_q50[, "wkfreuro"],
-  var_gdp = pred_q50_var[, "gdp"],
-  var_inflation = pred_q50_var[, "inflation"],
-  var_wkfreuro = pred_q50_var[, "wkfreuro"],
-  ar1_gdp = pred_q50_ar1[, "gdp"],
-  ar1_inflation = pred_q50_ar1[, "inflation"],
-  ar1_wkfreuro = pred_q50_ar1[, "wkfreuro"]
-)
-
-# Remove rows with all NA predictions (e.g., before the rolling window starts)
-combined_predictions <- combined_predictions %>%
-  filter(!is.na(bvar_gdp) | !is.na(var_gdp) | !is.na(ar1_gdp))
-
-# Save the combined data frame as a CSV
-write.csv(combined_predictions, file = "output/combined_predictions.csv", row.names = FALSE)
