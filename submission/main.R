@@ -1,6 +1,5 @@
-renv::status()
-
 #--------------------- libraries ---------------------#
+
 library(ggplot2)
 library(dplyr)
 library(tidyr)
@@ -13,57 +12,48 @@ library(tseries)
 # --------------------- set up ------------------------#
 # set seed for reproducibility
 set.seed(42)
+output_folder <- "output/plots/main"
+# --------------------- data preparation -----------------#
 
-# settings
-
-# load data and data manipulation
+# import data
 df <- utils::read.csv("data/data_quarterly.csv")
 
 window_size <- 40
 horizon <- 1
 lag_number <- 1
+
+#selected variables for BVAR model
+# in rmse.R we justify this choice (best results)
 selected_variables <- c("gdp", "inflation", "wkfreuro")
-#selected_variables<- c("gdp", "inflation", "wkfreuro", "consg", "ifix", 
-#                                                "exc1", "imc1", "ltot", "uroff", "wage", "srate", 
-#                                                "poilusd", "pcioecd")
-#selected_variables <- c("gdp", "inflation", "wkfreuro", "consg", 
-#                         "wage", "constot", "cpi", "domdem", "exc1",
-#                        "pime", "pimtot1", "unempoff", "urilo", "srate", 
-#                        "srate_ge", "wd",
-#                          "poilusd", "pcioecd")
 
-
+#format date
 df$date <- as.Date(paste0(df$date, "-01")) # format date
-df <- df %>% filter(date <= as.Date("2019-01-01")) # until 01.10.2025
-df <- df %>% filter(date <= as.Date("2025-10-01")) 
-# inflate CPI to get inflation rate
+
+# filter data until 2019-01-01 for training
+df <- df %>% filter(date <= as.Date("2019-01-01")) 
+
+# compute inflation rate and remove first NA row
 df$inflation <- ((df$cpi - dplyr::lag(df$cpi, 1)) / dplyr::lag(df$cpi, 1) ) * 100
-df <- df %>% filter(!is.na(inflation)) #remove first NA row
+df <- df %>% filter(!is.na(inflation)) 
 
 
-# gdp growth instead of gdp
-#df$gdp <- log(df$gdp)
-# -------------------- apply log + growth transformations --------------------
-
+# ----------------------  transformations ---------------------#
 rate_variables <- c("inflation", "urilo", "srate", "srate_ge")
 forecast_variables <- c("gdp", "inflation", "wkfreuro")
 
-#plot the forecast variables
-par(mfrow=c(3,1))
-for (var in forecast_variables) {
-  plot(df$date, df[[var]], type='l', main=var, xlab='Date', ylab=var)
-}
-
-# difference in difference
+# -------------------- apply log + growth transformations --------------------
 for (var in names(df)) {
   if (!(var %in% rate_variables) && var != "date") {
+    #log difference  
     df[[var]] <-  (log(df[[var]]) - log(dplyr::lag(df[[var]], 1))) *100
   }
 }
 
-df <- df %>% filter(!is.na(gdp))  # remove first row with NA
-# plot with the timeseries of the forecast variables 
+#remove first row with NA
+df <- df %>% filter(!is.na(gdp)) 
 
+# ---------------------- exploratory plots ---------------------#
+# plot with the timeseries of the forecast variables 
 df_long <- df %>%
   dplyr::select(date, all_of(forecast_variables)) %>%
   pivot_longer(-date, names_to = "variable", values_to = "rate")
@@ -73,182 +63,48 @@ ggplot(df_long, aes(x = date, y = rate, color = variable)) +
   labs(title = "Forecast Variables", x = "Date", y = "rate")+
   theme_bw()
 
-# get the correlation between variables (simply interessting to see)
+# save plot
+ggsave(paste0(output_folder, "/forecast_variables_timeseries.png"), width = 8, height = 6, dpi = 300)
+
+# ------------------------------ correlation matrix ---------------------#
+# useless for the forecast byt interesitng to see 
 correlations <- df %>%
   dplyr::select(all_of(selected_variables)) %>%
   cor()
+print("Correlations between selected variables:\n")
 print(correlations) 
 
-# BVAR models for exploration --------------------------------------------------
+#correlation matrix plot
+correlation_matrix <- as.data.frame(as.table(correlations))
+ggplot(correlation_matrix, aes(Var1, Var2, fill = Freq)) +
+  geom_tile() +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       limit = c(-1, 1), name="Correlation") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, 
+                                   size = 12, hjust = 1)) +
+  coord_fixed() +
+  labs(title = "Correlation Matrix of Selected Variables", x = "", y = "")
 
-# to better understand how the bvar models and priors work
+ggsave(paste0(output_folder, "/correlation_matrix.png"), width = 8, height = 6, dpi = 300)
 
-## first simple BVAR model for exploration ---------
+# ---------------------- priors parameters ---------------------#
+mn_mode <- 0.4
+mn_sd <- 0.5
+mn_min <- 0.001
+mn_max <- 5
 
-df <- df[, colSums(is.na(df)) == 0]
+soc_mode <- 1
+soc_sd <- 0.5
 
-if (FALSE){
-  
-  # BVAR with Minnisota Prior and sum of coefficients
-  
-  # last 80 data points
-  window_data <- df[(nrow(df)-79):nrow(df), ]
-  
-  mn <- bv_minnesota(
-    lambda = bv_lambda(mode = 0.4, sd = 0.5, min = 0.001, max = 5),
-    alpha  = bv_alpha(mode = 4),
-  )
-  
-  soc <- bv_soc(mode = 1, sd = 0.5)   # shrink sum of AR coeffs to 1, with variance
-  
-  priors <- bv_priors(
-    hyper = c("lambda", "alpha", "psi"),
-    mn = mn,
-    soc = soc
-  )
-  model <- bvar(
-    window_data%>% dplyr::select(all_of(forecast_variables)),
-    lags = 8,
-    n_draw = 100000,
-    n_burn = 25000,
-    n_thin = 1,
-    priors = priors,
-    verbose = TRUE
-  )
-  plot(model)
-  
-  prediction_1 <- predict(model, horizon = 1, conf_bands = c(0.16, 0.025))
-  prediction_4 <- predict(model, horizon = 4, conf_bands = c(0.16, 0.025))
 
-  plot(predict(model, horizon = 1, conf_bands = c(0.16, 0.025)), area = TRUE, t_back = 10,
-        vars = c("gdp", "inflation", "wkfreuro"))
-  plot(predict(model, horizon = 4, conf_bands = c(0.16, 0.025)), area = TRUE, t_back = 10, orientation = "v",
-       vars = c("gdp", "inflation", "wkfreuro"), col = "transparent")
-  
-  horizon <- 1
-  y_train <- window_data
-  trained_model <- bvar(
-    y_train %>% dplyr::select(all_of(selected_variables)),
-    lags = lag_number,
-    n_draw = 10000,
-    n_burn = 2500,
-    n_thin = 1,
-    priors = priors,
-    verbose = FALSE
-  )
-  
-  
-  horizon <- 4
-  y_train <- window_data
-  
-  trained_model <- bvar(
-    y_train %>% dplyr::select(all_of(selected_variables)),
-    lags = lag_number,
-    n_draw = 10000,
-    n_burn = 2500,
-    n_thin = 1,
-    priors = priors,
-    verbose = FALSE
-  )
-  
-  # --- setup sizes --------------------------------------------------------------
-  n_obs <- nrow(df) + horizon  # FIX: allow full horizon
-  
-  pred_q50  <- matrix(NA_real_, nrow = n_obs, ncol = length(selected_variables),
-                      dimnames = list(NULL, selected_variables))
-  pred_q16  <- matrix(NA_real_, nrow = n_obs, ncol = length(selected_variables),
-                      dimnames = list(NULL, selected_variables))
-  pred_q84  <- matrix(NA_real_, nrow = n_obs, ncol = length(selected_variables),
-                      dimnames = list(NULL, selected_variables))
-  pred_q025 <- matrix(NA_real_, nrow = n_obs, ncol = length(selected_variables),
-                      dimnames = list(NULL, selected_variables))
-  pred_q975 <- matrix(NA_real_, nrow = n_obs, ncol = length(selected_variables),
-                      dimnames = list(NULL, selected_variables))
-  
-  # --- model prediction ---------------------------------------------------------
-  prediction <- predict(trained_model, horizon = horizon, conf_bands = c(0.16, 0.025))
-  
-  for (h in 1:horizon) {
-    row_idx <- nrow(df) + h
-    pred_q50[row_idx,  ] <- prediction$quants["50%",  h, ]
-    pred_q16[row_idx,  ] <- prediction$quants["16%",  h, ]
-    pred_q84[row_idx,  ] <- prediction$quants["84%",  h, ]
-    pred_q025[row_idx, ] <- prediction$quants["2.5%", h, ]
-    pred_q975[row_idx, ] <- prediction$quants["97.5%",h, ]
-  }
-  
-  # --- build a proper future date index ----------------------------------------
-  # assume df$date is regular Date/POSIXct; infer step from the last two points
-  step <- diff(tail(df$date, 2))[1]
-  if (is.na(step) || step <= 0) step <- stats::median(diff(df$date))
-  future_dates <- seq(from = max(df$date) + step, by = step, length.out = horizon)
-  date_all <- c(df$date, future_dates)
-  
-  # --- plotting ----------------------------------------------------------------
-  plots <- list()
-  forecast_start <- nrow(df) + 1
-  
-  for (var in selected_variables) {
-    # actuals window (last ~20 points before forecast)
-    start_slice <- max(1, forecast_start - 4)
-    df_actual <- data.frame(date = df$date, actual = df[[var]]) |>
-      dplyr::slice(start_slice:dplyr::n())
-    
-    # future forecasts + a stitch row at the last actual date
-    keep <- (forecast_start - 1):n_obs
-    df_forecast <- data.frame(
-      date      = date_all[keep],
-      predicted = pred_q50[ keep, var],
-      lower1    = pred_q16[ keep, var],
-      upper1    = pred_q84[ keep, var],
-      lower2    = pred_q025[keep, var],
-      upper2    = pred_q975[keep, var]
-    )
-    
-    # after this line (which you already have)
-    df_forecast[1, c("predicted","lower1","upper1","lower2","upper2")] <- df[[var]][forecast_start - 1]
-    
-    # USE the full df_forecast (not [-1, ]) so the first row collapses to a point
-    plot <- ggplot() +
-      geom_ribbon(
-        data = df_forecast,
-        aes(x = date, ymin = lower2, ymax = upper2),
-        fill = "blue", alpha = 0.2
-      ) +
-      geom_ribbon(
-        data = df_forecast,
-        aes(x = date, ymin = lower1, ymax = upper1),
-        fill = "lightblue", alpha = 0.4
-      ) +
-      geom_line(
-        data = df_actual,
-        aes(x = date, y = actual),
-        color = "gray", size = 0.9
-      ) +
-      geom_line(
-        data = df_forecast,
-        aes(x = date, y = predicted),
-        color = "red", size = 1
-      ) +
-      labs(title = "", x = "Date", y = var) +
-      theme_bw() +
-      theme(
-        plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
-        panel.grid.minor = element_blank()
-      )
-    
-    plots[[var]] <- plot
-  }
-  
-  combined_plot <- patchwork::wrap_plots(plots, ncol = 1)
-  combined_plot
-}
-
-# rolling window forecast --------------------------------------
-
+# --------------------  BVAR ----------------------
+# --------------------rolling window forecast --------------------------------------
 # settings
 data <- df
 n_obs <- nrow(data)
+
+# for each quantity we build a matrix to save results
 # building a matrix to save results of q50
 pred_q50 <- matrix(NA_real_, nrow = n_obs, ncol = length(selected_variables),
                    dimnames = list(NULL, selected_variables))
@@ -266,28 +122,30 @@ pred_q975 <- matrix(NA_real_, nrow = n_obs, ncol = length(selected_variables),
                    dimnames = list(NULL, selected_variables))
 
 # check all for stationarity
-
 for (var in selected_variables) {
   adf_test <- tseries::adf.test(data[[var]], alternative = "stationary")
   if (adf_test$p.value < 0.05) { cat("Variable", var, "is stationary (p-value:", adf_test$p.value, ")\n")} 
   else {  cat("Variable", var, "is non-stationary (p-value:", adf_test$p.value, ")\n")}
 }
   
-# set priors -------------
+# set priors 
 mn <- bv_minnesota(
-  lambda = bv_lambda(mode = 0.5, sd = 1, min = 0.001, max = 5),
+  lambda = bv_lambda(mode = mn_mode, sd = mn_sd, min = mn_min, max = mn_max),
   alpha  = bv_alpha(mode = 3),
 )
 
-soc <- bv_soc(mode = 1, sd = 0.5)   # shrink sum of AR coeffs to 1, with variance 1
+soc <- bv_soc(mode = soc_mode, sd = soc_sd)  
 
+#  combination of priors
+# minnesota regularizes the autoregressive coefficients, reducing the risk of overfitting.
+# soc  imposes a constraint on the sum of the coefficients, ensuring the model captures persistence
 priors <- bv_priors(
   hyper = c("lambda", "alpha", "psi"),
   mn = mn,
   soc = soc
 )
 
-# rolling window ---------
+# ------------------------- rolling window -----------------------------
 for (i in seq(from = window_size + lag_number, to = n_obs - horizon)) {
   print(i)
   train_start <- i - window_size + 1
@@ -333,7 +191,6 @@ for (i in seq_along(forecast_variables)) {
 library(patchwork)
 plots <- list()
 
-
 for (var in forecast_variables) {
   
   df_forecast <- data.frame(
@@ -363,42 +220,58 @@ for (var in forecast_variables) {
   plot <- ggplot() +
     geom_ribbon(
       data = df_forecast,
-      aes(x = date, ymin = lower2, ymax = upper2),
-      fill = "blue", alpha = 0.2
+      aes(x = date, ymin = lower2, ymax = upper2, fill = "95% CI"),
+      alpha = 0.2
     ) +
     geom_ribbon(
       data = df_forecast,
-      aes(x = date, ymin = lower1, ymax = upper1),
-      fill = "lightblue", alpha = 0.4
+      aes(x = date, ymin = lower1, ymax = upper1, fill = "68% CI"),
+      alpha = 0.4
     ) +
     geom_line(
       data = df_actual,
-      aes(x = date, y = actual),
-      color = "gray", size = 0.9
+      aes(x = date, y = actual, color = "Actual"),
+      size = 0.9
     ) +
     geom_line(
       data = df_forecast, 
-      aes(x = date, y = predicted),
-      color = "red", size = 1
+      aes(x = date, y = predicted, color = "Forecast"),
+      size = 1
     ) +
-    labs(title = "", x = "Date", y = var) +
+    labs(
+      title = paste("Forecast for", var),
+      x = "Date",
+      y = var,
+      fill = "Confidence Interval",
+      color = "Legend"
+    ) +
     theme_bw() +
     theme(
       plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
-      panel.grid.minor = element_blank()
+      panel.grid.minor = element_blank(),
+      legend.position = "bottom"
     )
   
   plots[[var]] <- plot
+  # save individual plot
+  ggsave(paste0(output_folder, "/bvar_rolling_w", var, ".png"), 
+         plot = plot, width = 8, height = 6, dpi = 300)
 }
 
 # plot plots together
 combined_plot <- wrap_plots(plots, ncol = 1)
 combined_plot
 
+# save plot
+ggsave(paste0(output_folder, "/bvar_rolling_w_combined.png"), 
+       plot = combined_plot, width = 10, height = 12, dpi = 300)
 
-# Diffusion Prior ------------------
 
-# matrix for results (point forecasts only)
+#--------------------- end of BVAR rolling window forecast --------------------
+#------------------------------------------------------------------------------
+# in the next section, we compare BVAR with VAR and AR models
+# -------------------- VAR model (OLS) rolling window forecast ----------------
+
 pred_q50_var <- matrix(NA_real_, nrow = n_obs, ncol = length(selected_variables),
                    dimnames = list(NULL, selected_variables))
 
@@ -427,7 +300,7 @@ for (i in seq(from = window_size + lag_number, to = n_obs - horizon)) {
   }
 }
 
-# --- evaluation
+# evaluation
 for (i in seq_along(forecast_variables)) {
   var <- forecast_variables[i]
   cat("Evaluating variable:", var, "\n")
@@ -442,7 +315,6 @@ for (i in seq_along(forecast_variables)) {
 }
 
 # plot VAR (diffusion Prior) vs actual vs BVAR forecasts
-
 for (var in forecast_variables) {
   df_plot <- data.frame(
     date      = df$date,
@@ -452,16 +324,27 @@ for (var in forecast_variables) {
   ) %>% filter(!is.na(predicted_bvar) & !is.na(predicted_var))
   
   plot <- ggplot(df_plot, aes(x = date)) +
-    geom_line(aes(y = actual), color = "navy", linetype = "dashed", size = 0.9) +
-    geom_line(aes(y = predicted_bvar), color = "red", size = 1) +
-    geom_line(aes(y = predicted_var), color = "green", size = 1) +
+    geom_line(aes(y = actual, color = "Actual"), linetype = "dashed", size = 0.9) +
+    geom_line(aes(y = predicted_bvar, color = "BVAR Forecast"), size = 1) +
+    geom_line(aes(y = predicted_var, color = "VAR Forecast"), size = 1) +
     labs(
-      title = paste("Forecast Comparison for", var, "| Selected vs Diffusion Prior (OLS)"),
-      x     = "Date", y     = var) +
+      title = paste("Forecast Comparison for", var, "| BVAR vs VAR"),
+      x = "Date",
+      y = var,
+      color = "Legend"
+    ) +
     theme_bw() +
-    theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 14))
+    theme(
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+      legend.position = "bottom"
+    )
   print(plot)
+  # save individual plot
+  ggsave(paste0(output_folder, "/var_vs_bvar_rolling_w_",var, ".png"), 
+         plot = plot, width = 8, height = 6, dpi = 300) 
+
 }
+#------------------------------------------------------------------------------
 
 # for each of forecast variables AR(1) model as a benchmark
 
@@ -473,6 +356,7 @@ pred_q84_ar1  <- pred_q50_ar1
 pred_q025_ar1 <- pred_q50_ar1
 pred_q975_ar1 <- pred_q50_ar1
 
+# rolling window forecast with AR(1)
 for (var in forecast_variables) {
   for (i in seq(from = window_size + 1, to = n_obs - horizon)) {
     # rolling window
@@ -483,9 +367,11 @@ for (var in forecast_variables) {
     ar_model <- Arima(y_train, order = c(1, 0, 0), include.constant = TRUE)
     fc <- forecast(ar_model, h = horizon, level = c(68, 95))
     
+    # extract quantiles
     idx68 <- match(68, fc$level)
     idx95 <- match(95, fc$level)
     
+    #save forecasts
     t_idx <- i + horizon
     pred_q50_ar1[t_idx, var]  <- as.numeric(fc$mean[horizon])     # median ≈ mean for Gaussian ARIMA
     pred_q16_ar1[t_idx, var]  <- fc$lower[horizon, idx68]         # ~16th
@@ -540,37 +426,51 @@ for (var in forecast_variables) {
   plot <- ggplot() +
     geom_ribbon(
       data = df_forecast,
-      aes(x = date, ymin = lower2, ymax = upper2),
-      fill = "blue", alpha = 0.2
+      aes(x = date, ymin = lower2, ymax = upper2, fill = "95% CI"),
+      alpha = 0.2
     ) +
     geom_ribbon(
       data = df_forecast,
-      aes(x = date, ymin = lower1, ymax = upper1),
-      fill = "lightblue", alpha = 0.4
+      aes(x = date, ymin = lower1, ymax = upper1, fill = "68% CI"),
+      alpha = 0.4
     ) +
     geom_line(
       data = df_actual,
-      aes(x = date, y = actual),
-      color = "gray", size = 0.9
+      aes(x = date, y = actual, color = "Actual"),
+      size = 0.9
     ) +
     geom_line(
       data = df_forecast, 
-      aes(x = date, y = predicted),
-      color = "red", size = 1
+      aes(x = date, y = predicted, color = "Forecast"),
+      size = 1
     ) +
-    labs(title = "", x = "Date", y = var) +
+    labs(
+      title = paste("Forecast for", var),
+      x = "Date",
+      y = var,
+      fill = "Confidence Interval",
+      color = "Legend"
+    ) +
     theme_bw() +
     theme(
       plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
-      panel.grid.minor = element_blank()
+      panel.grid.minor = element_blank(),
+      legend.position = "bottom"
     )
   
   plots[[var]] <- plot
+
+  # save individual plot
+  ggsave(paste0(output_folder, "/ar1_rolling_w_", var, ".png"), 
+         plot = plot, width = 8, height = 6, dpi = 300)
 }
 
 # plot plots together
 combined_plot <- wrap_plots(plots, ncol = 1)
-combined_plot
+# save plot
+ggsave(paste0(output_folder, "/ar1_rolling_w_combined.png"), 
+       plot = combined_plot, width = 10, height = 12, dpi = 300)
+
 
 # save the rmse for each model in a data frame
 results <- data.frame(
@@ -596,4 +496,30 @@ for (i in seq_along(forecast_variables)) {
 print(results)
 
 saveRDS(results, file = "output/rmse_comparison_horizon1.rds")
+write.csv(results, file = "output/rmse_comparison_horizon1.csv", row.names = FALSE)
 
+
+### ---------- combined predictions -----------------------------
+# Combine predictions into one data frame
+combined_predictions <- data.frame(
+  date = df$date,  # Use the original dates
+  actual_gdp = data$gdp,
+  actual_inflation = data$inflation,
+  actual_wkfreuro = data$wkfreuro,
+  bvar_gdp = pred_q50[, "gdp"],
+  bvar_inflation = pred_q50[, "inflation"],
+  bvar_wkfreuro = pred_q50[, "wkfreuro"],
+  var_gdp = pred_q50_var[, "gdp"],
+  var_inflation = pred_q50_var[, "inflation"],
+  var_wkfreuro = pred_q50_var[, "wkfreuro"],
+  ar1_gdp = pred_q50_ar1[, "gdp"],
+  ar1_inflation = pred_q50_ar1[, "inflation"],
+  ar1_wkfreuro = pred_q50_ar1[, "wkfreuro"]
+)
+
+# Remove rows with all NA predictions (e.g., before the rolling window starts)
+combined_predictions <- combined_predictions %>%
+  filter(!is.na(bvar_gdp) | !is.na(var_gdp) | !is.na(ar1_gdp))
+
+# Save the combined data frame as a CSV
+write.csv(combined_predictions, file = "output/combined_predictions.csv", row.names = FALSE)

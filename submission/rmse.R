@@ -1,4 +1,4 @@
-#in this file, we will test BVAR model with different priors, selected
+# in this file, we will test BVAR model with different priors, selected
 #variables and lags to compute the RMSE in each case.
 
 #results in this file will be used to compare different
@@ -15,6 +15,7 @@ library(forecast)
 library(tseries)
 
 # --------------------- set up ------------------------#
+
 # set seed for reproducibility
 set.seed(42)
 
@@ -23,46 +24,46 @@ df <- utils::read.csv("data/data_quarterly.csv")
 
 df$date <- as.Date(paste0(df$date, "-01")) # format date
 df <- df %>% filter(date <= as.Date("2019-01-01")) # until 01.10.2025
-df <- df %>% filter(date <= as.Date("2025-10-01")) 
-# inflate CPI to get inflation rate
-df$inflation <- ((df$cpi - dplyr::lag(df$cpi, 1)) / dplyr::lag(df$cpi, 1) ) * 100
-df <- df %>% filter(!is.na(inflation)) #remove first NA row
 
-# -------------------- apply log + growth transformations --------------------
+
+# inflate CPI to get inflation rate and remove first NA row
+df$inflation <- ((df$cpi - dplyr::lag(df$cpi, 1)) / dplyr::lag(df$cpi, 1) ) * 100
+df <- df %>% filter(!is.na(inflation)) 
+
+
+# -------------------- transformations --------------------
 rate_variables <- c("inflation", "urilo", "srate", "srate_ge")
 forecast_variables <- c("gdp", "inflation", "wkfreuro")
 
-# difference in difference
+#log difference
 for (var in names(df)) {
   if (!(var %in% rate_variables) && var != "date") {
     df[[var]] <-  (log(df[[var]]) - log(dplyr::lag(df[[var]], 1))) *100
   }
 }
 
-df <- df %>% filter(!is.na(gdp))  # remove first row with NA
+df <- df %>% filter(!is.na(gdp)) 
+
+
 # ---------------------- lags ---------------------#
 
-# possible lags: 1, 4 (one year), 8 (two years)
+# possible lags: 1, 4 (one year)
 lags <- c(1,4)
-# ------------------ selected variables ------------------#
 
-#selected variables for BVAR model
+
+# ------------------ selected variables ------------------#
+# we will test three sets of variables to see how the forecast
+# we use RMSE to compare them
 
 selected_variables_0 <- c("gdp", "inflation", "wkfreuro")
-#"consp"
+
 selected_variables_1 <- c("gdp", "inflation", "wkfreuro", "consg",  "ltot", 
                           "wage","poilusd", "pcioecd")
-
-#from this initial set, we will also try a smaller set of variables
 
 selected_variables_2 <- c("gdp", "inflation", "wkfreuro", "consg", "ifix", 
                         "exc1", "imc1", "ltot", "uroff", "wage", "srate", 
                           "poilusd", "pcioecd")
 
-#selected_variables_3 <- c("gdp", "inflation", "wkfreuro", "exc1", "ltot",
-#                         "wage")#, "srate")
-
-#-------------------------------------------------------------------
 # List of variable sets to test
 variable_sets <- list(
   set_0 = selected_variables_0,
@@ -70,16 +71,17 @@ variable_sets <- list(
   set_2 = selected_variables_2
 )
 
-
 #--------------------- priors ---------------------#
-# Define different prior configurations to test
+# ------------------- Minnesota prior ------------------- #
 mn <- bv_minnesota(
   lambda = bv_lambda(mode = 0.5, sd = 0.1, min = 0.001, max = 5),
   alpha  = bv_alpha(mode = 4),
 )
 
-soc <- bv_soc(mode = 1, sd = 0.5)   # shrink sum of AR coeffs to 1, with variance
+# ------------------- Sum-of-coefficients prior ------------------- #
+soc <- bv_soc(mode = 1, sd = 0.5)   
 
+# ------------------- Prior configurations ------------------- #
 mn_prior_bv <- bv_priors(
   hyper = c("lambda", "alpha"),
   mn = mn
@@ -91,25 +93,35 @@ soc_prior_bv <- bv_priors(
   soc = soc
 )
 
-prior_configs <- list( # list of priors
+# List of prior configurations to test
+prior_configs <- list( 
   mn      = mn_prior_bv,
-  soc     = soc_prior_bv#,
+  soc     = soc_prior_bv
 )
 
+# ---------------------- rolling window size ---------------------#
 rolling_window_size <- 40  # e.g., 40 quarters (10 years)
 
-#---------------------- end of setup ---------------------#
+#--------------------------------------------------#
 
-compute_bvar_rmse <- function(data, variables, lags, prior, window_size){
-  
+
+#-------------------- BVAR/VAR RMSE computation ---------------------#
+# Function to compute RMSE for BVAR model with rolling window
+compute_bvar_rmse <- function(data, variables, lags, prior, window_size, prior_name){
+    
+  print(paste("Computing RMSE for prior:", prior_name, "with lags:", lags, "and variables:", paste(variables, collapse = ", ")))
   horizon <- 1
   n_obs <- nrow(data)
 
   forecast_variables <- c("gdp", "inflation", "wkfreuro")
 
+  # initialize matrix to store predictions (50% quantile => median)
+  # each row is an observation, each column a variable
   pred_q50 <- matrix(NA_real_, nrow = n_obs, ncol = length(variables),
                      dimnames = list(NULL, variables))
+
   
+  # rolling window forecasting
   for (i in seq(from = window_size + lags, to = n_obs - horizon)) {
     
     train_start <- i - window_size + 1
@@ -129,8 +141,8 @@ compute_bvar_rmse <- function(data, variables, lags, prior, window_size){
       verbose = FALSE
     ))
     
+    # make prediction
     prediction <- predict(trained_model, horizon = horizon)
-    
     pred_q50[i + horizon, ] <- prediction$quants["50%", 1, ]
   }
 
@@ -140,20 +152,26 @@ compute_bvar_rmse <- function(data, variables, lags, prior, window_size){
     rmse = numeric(length(forecast_variables))
   )
   
+  # iterate over forecasted variables to compute RMSE
   for (i in seq_along(forecast_variables)) {
     
     var <- forecast_variables[i]
 
-    cat(var, ": rmse: " )
+
+    cat(var)
     valid_indices <- which(!is.na(pred_q50[, var]))
     rmse <- sqrt(mean((pred_q50[valid_indices, var] - data[valid_indices, var])^2))
     mae <- mean(abs(pred_q50[valid_indices, var] - data[valid_indices, var]))
-    cat(rmse, "\n")
+
+    cat(" RMSE: ", rmse, " MAE: ", mae, "\n")
     
     res$rmse[i] <- rmse
   }
   
+  output_folder <- "output/plots/forecast_vs_actual"
+  # Plot actual vs forecast for each variable
   for (i in seq_along(forecast_variables)) {
+
     
     var <- forecast_variables[i]
 
@@ -167,10 +185,19 @@ compute_bvar_rmse <- function(data, variables, lags, prior, window_size){
       geom_line(aes(y = actual, color = "Actual")) +
       geom_line(aes(y = forecast, color = "Forecast")) +
       labs(title = paste("BVAR Forecast vs Actual for", var),
+           subtitle = paste("Prior:", prior_name, "(lags:", lags, ")"),
+           caption = paste("Rolling window size:", window_size, " | Variables:", paste(variables, collapse = ", ")),
            y = var,
            color = "Legend") +
       theme_bw()
     print(p)
+    # save plots
+      ggsave(
+    filename = paste0(output_folder, "/", var, "_", prior_name, "_lags", lags, "w", window_size, "_v", paste(variables, collapse = "_"), ".png"),
+    plot = p,
+    width = 8, height = 6, dpi = 300
+  )
+    
   }
   
   return(res)
@@ -202,7 +229,8 @@ for (lag in lags) {
         variables = selected_vars,
         lags = lag,
         prior = prior_config,
-        window_size = rolling_window_size
+        window_size = rolling_window_size,
+        prior_name = prior_name
       )
       temp_results$lags <- lag
       temp_results$variable_set <- var_set_name
@@ -216,7 +244,7 @@ results_df
 
 # save results to the output folder
 save(results_df, file = "output/results_df.RData")
-
+write.csv(results_df, file = "output/results_df.csv", row.names = FALSE)
 
 # displaying results a bit differently
 
