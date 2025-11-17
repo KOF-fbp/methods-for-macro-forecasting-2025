@@ -5,12 +5,16 @@ library(zoo)
 # Load SMI data from Yahoo Finance
 getSymbols("^SSMI", src = "yahoo")
 
+smi_new <- getSymbols("^SSMI", src = "stooq", auto.assign = FALSE)
+start(smi)
+tail(smi)
+
 # get daily
 smi_daily <- getSymbols("^SSMI", src = "yahoo", auto.assign = FALSE)
 
 # calculate the monthly average, instead of taking the closing price of the last day of the month
 smi_monthly_avg <- period.apply(
-  smi_daily$SSMI.Adjusted,
+  smi_daily$SSMI.Close,
   INDEX = endpoints(smi_daily, "months"),
   FUN = function(x) {
     mean(as.numeric(x))

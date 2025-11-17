@@ -85,13 +85,16 @@ tail(plkopr_fin)
 # the other 2 are already filtered
 
 
-# source smi.R which fetches monthly smi data
-setwd("/Users/minna/Code/Macro_Forecasting/group_project/methods-for-macro-forecasting-2025/submission/src")
-source("smi.R")
+# source full_smi.py which fetches monthly smi data -> from 1990 till today. quantmod (used in smi.R) only has from 2007 until 2025.
+setwd("/Users/minna/Code/Macro_Forecasting/group_project/methods-for-macro-forecasting-2025/submission/data/")
+# source("smi.R")
+smi <- read.csv("full_smi.csv") |>
+   mutate(date = as.Date(date)) 
+  
+# str(smi)
 
 # Combine series with named columns & smi
-
-series_list <- list(plkopr_fin, devkum_eur, amarbma_t0, snboffzisa_eu, smi_df)
+series_list <- list(plkopr_fin, devkum_eur, amarbma_t0, snboffzisa_eu, smi)
 
 combined_df <- reduce(series_list, full_join, by = "date") |>
   arrange(date)
@@ -99,6 +102,5 @@ combined_df <- reduce(series_list, full_join, by = "date") |>
 tail(combined_df, n=10)
 
 View(combined_df)
-setwd("/Users/minna/Code/Macro_Forecasting/group_project/methods-for-macro-forecasting-2025/submission/data/")
 write.csv(combined_df, "combined_timeseries.csv")
 
