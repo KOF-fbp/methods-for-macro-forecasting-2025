@@ -51,3 +51,7 @@ rsconnect/
 # Ignore markdown files created for documentation
 MFVAR_README.md
 IMPLEMENTATION_SUMMARY.md
+
+# ignore ide specifics
+
+/*/.vscode
