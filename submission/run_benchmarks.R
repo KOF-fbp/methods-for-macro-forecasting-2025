@@ -18,6 +18,21 @@ max_folds_arg <- cli_args[grepl("^--max-folds=", cli_args)]
 if (length(max_folds_arg)) {
   max_folds_override <- suppressWarnings(as.integer(sub("^--max-folds=", "", max_folds_arg[1])))
 }
+early_strategy <- getOption("mfvar.early_monthly", Sys.getenv("MFVAR_EARLY_MONTHLY", "fill"))
+early_arg <- cli_args[grepl("^--early-monthly=", cli_args)]
+if (length(early_arg)) {
+  early_candidate <- sub("^--early-monthly=", "", early_arg[1])
+  if (nzchar(early_candidate)) {
+    early_strategy <- early_candidate
+  }
+}
+if (!early_strategy %in% c("fill", "omit")) {
+  warning(sprintf("Unknown early-monthly strategy '%s'; defaulting to 'fill'.", early_strategy))
+  early_strategy <- "fill"
+}
+
+# Use strategy-dependent seed so MCMC draws differ between fill/omit
+mfvar_seed <- if (identical(early_strategy, "fill")) 123L else 456L
 if (fast_mode && !("--with-cv" %in% cli_args)) {
   skip_cv <- TRUE
 }
@@ -27,6 +42,7 @@ if (fast_mode) {
 if (skip_cv) {
   message("→ Cross-validation will be skipped (use --with-cv to re-enable).")
 }
+message(sprintf("→ Early monthly data handling strategy: %s", early_strategy))
 
 source(file.path("R", "setup.R"))
 source(file.path("R", "data_processing.R"))
@@ -106,14 +122,20 @@ qdat_raw <- read_quarterly_data(DATA_DIR)
 # Load KOF Barometer for MIDAS-KOF models
 baro_raw <- fetch_kof_barometer()
 
-# Load combined timeseries for MF-VAR (3 SNB monthly indicators)
+# Load combined timeseries for MF-VAR (5 SNB monthly indicators)
 monthly_raw <- read_combined_timeseries(
   DATA_DIR,
-  variables = c("plkopr", "devkum", "amarbma")
+  variables = c("plkopr", "devkum", "amarbma", "snboffzisa", "smi_monthly_avg")
 )
 
 # Trim quarterly data to overlap with monthly indicators
-trimmed <- trim_to_overlap(qdat_raw, monthly_raw$ts_list, mode = "ragged", fill_method = "locf")
+trimmed <- trim_to_overlap(
+  qdat_raw,
+  monthly_raw$ts_list,
+  mode = "ragged",
+  fill_method = "locf",
+  start_strategy = early_strategy
+)
 qdat_orig <- trimmed$qdat
 monthly_series_list <- window_monthly_series(trimmed$monthly, qdat_orig, end_mode = "available")
 
@@ -197,7 +219,7 @@ mfvar_holdout_result <- forecast_mfvar(
   n_lags,
   eval_horizon,
   target_vars,
-  seed = 123L,
+  seed = mfvar_seed,
   return_model = FALSE,
   extract_states = TRUE
 )

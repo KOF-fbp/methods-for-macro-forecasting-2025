@@ -133,9 +133,16 @@ read_combined_timeseries <- function(data_dir, variables = NULL, deduplicate = c
   )
 }
 
-trim_to_overlap <- function(qdat, monthly_input, mode = c("restrict", "ragged"), fill_method = c("locf", "none")) {
+trim_to_overlap <- function(
+    qdat,
+    monthly_input,
+    mode = c("restrict", "ragged"),
+    fill_method = c("locf", "none"),
+    start_strategy = c("fill", "omit")
+) {
   mode <- match.arg(mode)
   fill_method <- match.arg(fill_method)
+  start_strategy <- match.arg(start_strategy)
   fill_series <- function(series) {
     if (identical(fill_method, "none")) {
       return(series)
@@ -147,6 +154,20 @@ trim_to_overlap <- function(qdat, monthly_input, mode = c("restrict", "ragged"),
     vals <- zoo::na.locf(vals, na.rm = FALSE)
     vals <- zoo::na.locf(vals, fromLast = TRUE, na.rm = FALSE)
     stats::ts(vals, start = stats::start(series), frequency = stats::frequency(series))
+  }
+  first_non_na_month <- function(series) {
+    vals <- as.numeric(series)
+    idx <- which(!is.na(vals))[1]
+    if (is.na(idx)) {
+      return(NULL)
+    }
+    freq <- stats::frequency(series)
+    start_idx <- stats::start(series)
+    base_offset <- (start_idx[1] * freq) + (start_idx[2] - 1)
+    total_periods <- base_offset + (idx - 1)
+    year <- total_periods %/% freq
+    month <- (total_periods %% freq) + 1
+    c(year, month)
   }
 
   if (inherits(monthly_input, "ts")) {
@@ -246,14 +267,46 @@ trim_to_overlap <- function(qdat, monthly_input, mode = c("restrict", "ragged"),
   }
 
   qdat_trimmed <- qdat
+  if (!nrow(qdat_trimmed)) {
+    stop("Quarterly dataset is empty; cannot align monthly indicators.")
+  }
+  q_start <- qdat_trimmed$qtr[1]
+  q_start_mon <- zoo::as.yearmon(q_start)
+  q_start_date <- zoo::as.Date(q_start_mon)
+  # Extend two months before the sample start so monthly aggregation has enough
+  # history (matches window_monthly_series default backfill window).
+  back_period <- lubridate::period(2L, units = "months")
+  q_start_back <- suppressMessages(lubridate::`%m-%`(q_start_date, back_period))
+  target_start <- c(lubridate::year(q_start_back), lubridate::month(q_start_back))
   target_end_year <- max(ends_matrix[1, ])
   target_end_month <- max(ends_matrix[2, ])
   target_end <- c(target_end_year, target_end_month)
 
+  if (identical(start_strategy, "omit")) {
+    keep_idx <- vapply(monthly_input, function(series) {
+      series_start <- first_non_na_month(series)
+      if (is.null(series_start)) {
+        return(FALSE)
+      }
+      series_start[1] < target_start[1] || (series_start[1] == target_start[1] && series_start[2] <= target_start[2])
+    }, logical(1))
+    dropped <- names(monthly_input)[!keep_idx]
+    if (length(dropped)) {
+      message(sprintf(
+        "Dropping monthly indicators without coverage at sample start: %s",
+        paste(dropped, collapse = ", ")
+      ))
+    }
+    monthly_input <- monthly_input[keep_idx]
+    if (!length(monthly_input)) {
+      stop("No monthly indicators cover the start of the quarterly sample under the 'omit' strategy.")
+    }
+  }
+
   extended_monthly <- lapply(monthly_input, function(x) {
     stats::window(
       x,
-      start = stats::start(x),
+      start = target_start,
       end = target_end,
       extend = TRUE
     )

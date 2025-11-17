@@ -19,6 +19,24 @@ start_time <- Sys.time()
 
 variable <- step_ahead <- horizon <- lower <- median <- upper <- NULL
 
+cli_args <- commandArgs(trailingOnly = TRUE)
+early_strategy <- getOption("mfvar.early_monthly", Sys.getenv("MFVAR_EARLY_MONTHLY", "fill"))
+arg_match <- cli_args[grepl("^--early-monthly=", cli_args)]
+if (length(arg_match)) {
+  early_candidate <- sub("^--early-monthly=", "", arg_match[1])
+  if (nzchar(early_candidate)) {
+    early_strategy <- early_candidate
+  }
+}
+if (!early_strategy %in% c("fill", "omit")) {
+  warning(sprintf("Unknown early-monthly strategy '%s'; defaulting to 'fill'.", early_strategy))
+  early_strategy <- "fill"
+}
+message(sprintf("→ Early monthly data handling strategy: %s", early_strategy))
+
+# Use strategy-dependent seed so MCMC draws differ between fill/omit
+mfvar_seed <- if (identical(early_strategy, "fill")) 123L else 456L
+
 if (identical(Sys.getenv("MFVAR_VERSION"), "manual")) {
   stop(
     paste(
@@ -43,10 +61,16 @@ for (dir in c(OUT_DIR, CSV_DIR, PLOT_DIR, MODEL_DIR)) {
 # from the combined SNB dataset. We keep only periods where every chosen
 # monthly series is available.
 qdat_raw <- read_quarterly_data(DATA_DIR)
-monthly_variables <- c("plkopr", "devkum", "amarbma")
+monthly_variables <- c("plkopr", "devkum", "amarbma", "snboffzisa", "smi_monthly_avg")
 monthly_data <- read_combined_timeseries(DATA_DIR, variables = monthly_variables)
 
-trimmed <- trim_to_overlap(qdat_raw, monthly_data$ts_list, mode = "ragged", fill_method = "locf")
+trimmed <- trim_to_overlap(
+  qdat_raw,
+  monthly_data$ts_list,
+  mode = "ragged",
+  fill_method = "locf",
+  start_strategy = early_strategy
+)
 stationary <- stationarise_quarterly(trimmed$qdat)
 qdat_orig <- trimmed$qdat
 qdat_adj <- stationary$data
@@ -60,7 +84,7 @@ n_lags <- 5
 # --- Estimation and forecasting --------------------------------------------
 # Refit the MF-VAR on the full sample and produce 12 months of forecasts
 # (which aggregate into 4 quarters = 1-year horizon for quarterly variables).
-mod_ss <- estimate_mfvar_model(Y, n_lags, n_fcst = 12, seed = 123)
+mod_ss <- estimate_mfvar_model(Y, n_lags, n_fcst = 12, seed = mfvar_seed)
 
 latent_states_path <- NULL
 latent_states_plot <- NULL
