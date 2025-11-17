@@ -6,7 +6,6 @@ library(yaml)
 library(tidyverse)
 # set_update_all()
 
-
 # get data from swissdata repo 
 # cannot be run by others, sorry :(
 # i have access to the pre-cleaned data
@@ -87,8 +86,15 @@ tail(plkopr_fin)
 # the other 2 are already filtered
 
 
-# Combine series with named columns
-series_list <- list(plkopr_fin, devkum_eur, amarbma_t0, snboffzisa_eu)
+setwd("/Users/minna/Code/Macro_Forecasting/group_project/methods-for-macro-forecasting-2025/submission/data/")
+# source smi.R which fetches monthly smi data
+setwd("/Users/minna/Code/Macro_Forecasting/group_project/methods-for-macro-forecasting-2025/submission/src")
+source("smi.R")
+
+
+# Combine series with named columns & smi
+
+series_list <- list(plkopr_fin, devkum_eur, amarbma_t0, snboffzisa_eu, smi_df)
 
 combined_df <- reduce(series_list, full_join, by = "date") |>
   arrange(date)
@@ -96,6 +102,5 @@ combined_df <- reduce(series_list, full_join, by = "date") |>
 tail(combined_df, n=10)
 
 
-setwd("/Users/minna/Code/Macro_Forecasting/group_project/methods-for-macro-forecasting-2025/submission/data/")
 write.csv(combined_df, "combined_timeseries.csv")
 
