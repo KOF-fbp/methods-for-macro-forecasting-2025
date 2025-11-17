@@ -68,16 +68,14 @@ devkum_eur <- devkum |>
     select(date, devkum_eur = value)
 
 tail(devkum_eur)
-# ----------------- Amarbma = Arbeitsmarktzahlen (t0 = total)
-# TODO: only use 1 value!!!
+# ----------------- Amarbma = Arbeitsmarktzahlen (t0 = total registered unemployment)
 amarbma_t0 <- amarbma |>
   filter(overview == "t0") |>
   mutate(date = as.Date(date)) |>
   select(date, amarbma_t0 = value) 
 
 tail(amarbma_t0)
-# --------------- plkopr = inflationszahlen
-
+# --------------- plkopr = inflationszahlen (in 2020 prices)
 plkopr_fin <- plkopr |>
   mutate(date = as.Date(date)) |>
   filter(overview == "ld2010100") |>
@@ -100,6 +98,7 @@ combined_df <- reduce(series_list, full_join, by = "date") |>
 
 tail(combined_df, n=10)
 
+View(combined_df)
 setwd("/Users/minna/Code/Macro_Forecasting/group_project/methods-for-macro-forecasting-2025/submission/data/")
 write.csv(combined_df, "combined_timeseries.csv")
 
