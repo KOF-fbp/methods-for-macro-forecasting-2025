@@ -553,8 +553,6 @@ for (var in names(df_fc)) {
 
 df_fc <- df_fc %>% filter(!is.na(gdp)) 
 
-window_data <- df_fc[(nrow(df_fc)-40):nrow(df_fc), ]
-
 # set priors -------------
 mn <- bv_minnesota(
   lambda = bv_lambda(mode = mn_mode, sd = mn_sd, min = mn_min, max = mn_max),
@@ -570,6 +568,7 @@ priors <- bv_priors(
 )   
 
 horizon <- 4
+window_data <- df[(nrow(df)-40):nrow(df), ]
 y_train <- window_data
 
 # --------------------- fitting model- ------------------------------------------------
@@ -593,7 +592,7 @@ pred_q025 <- pred_q50
 pred_q975 <- pred_q50
 
 # --- model prediction with BVAR ---------------------------------------------------------
-prediction <- predict(trained_model, horizon = horizon, conf_bands = c(0.16, 0.025))
+prediction <- predict(trained_model, horizon = horizon, newdata = df_fc[,selected_variables], conf_bands = c(0.16, 0.025))
 
 for (h in 1:horizon) {
   row_idx <- nrow(df_fc) + h
