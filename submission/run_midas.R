@@ -43,9 +43,9 @@ message("Loading and preparing data...")
 
 qdat_raw <- read_quarterly_data(DATA_DIR)
 baro_raw <- fetch_kof_barometer()
-trimmed <- trim_to_overlap(qdat_raw, baro_raw)
+trimmed <- trim_to_overlap(qdat_raw, baro_raw, mode = "ragged", fill_method = "locf")
 qdat_orig <- trimmed$qdat
-baro_ts <- window_baro(trimmed$baro_ts, qdat_orig)
+baro_ts <- window_baro(trimmed$baro_ts, qdat_orig, end_mode = "available")
 
 # Prepare monthly differenced barometer
 first_qtr_date <- zoo::as.Date(qdat_orig$qtr[1], frac = 0)

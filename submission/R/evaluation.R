@@ -23,7 +23,7 @@ run_holdout_evaluation <- function(qdat_adj, qdat_orig, monthly_inputs, n_lags, 
 
     baro_train_end <- quarter_to_month_end(q_train_orig$qtr[nrow(q_train_orig)])
     monthly_train <- if (is.list(monthly_inputs)) {
-      window_monthly_series(monthly_inputs, q_train_orig)
+      window_monthly_series(monthly_inputs, q_train_orig, end_mode = "available")
     } else {
       stats::window(monthly_inputs, end = baro_train_end)
     }
@@ -163,7 +163,7 @@ run_cross_validation <- function(qdat_adj, qdat_orig, monthly_inputs, n_lags, ta
 
       baro_train_end <- quarter_to_month_end(q_train_orig$qtr[nrow(q_train_orig)])
       monthly_train <- if (is.list(monthly_inputs)) {
-        window_monthly_series(monthly_inputs, q_train_orig)
+        window_monthly_series(monthly_inputs, q_train_orig, end_mode = "available")
       } else {
         stats::window(monthly_inputs, end = baro_train_end)
       }

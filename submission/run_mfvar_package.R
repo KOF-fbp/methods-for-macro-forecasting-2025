@@ -46,20 +46,12 @@ qdat_raw <- read_quarterly_data(DATA_DIR)
 monthly_variables <- c("plkopr", "devkum", "amarbma")
 monthly_data <- read_combined_timeseries(DATA_DIR, variables = monthly_variables)
 
-start_quarter <- zoo::as.yearqtr(monthly_data$start_date)
-qdat_filtered <- qdat_raw |>
-  dplyr::filter(.data$qtr >= start_quarter)
-
-if (!nrow(qdat_filtered)) {
-  stop("Quarterly dataset does not contain observations after the monthly data start date.")
-}
-
-trimmed <- trim_to_overlap(qdat_filtered, monthly_data$ts_list)
+trimmed <- trim_to_overlap(qdat_raw, monthly_data$ts_list, mode = "ragged", fill_method = "locf")
 stationary <- stationarise_quarterly(trimmed$qdat)
 qdat_orig <- trimmed$qdat
 qdat_adj <- stationary$data
 transforms <- stationary$transforms
-monthly_ts <- window_monthly_series(trimmed$monthly, qdat_orig)
+monthly_ts <- window_monthly_series(trimmed$monthly, qdat_orig, end_mode = "available")
 Y <- build_Y(qdat_adj, monthly_ts)
 
 target_vars <- target_variables

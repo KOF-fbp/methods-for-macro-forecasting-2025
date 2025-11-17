@@ -7,7 +7,7 @@ Prior: minn
 
 Error covariance matrix: Inverse Wishart
 5 lags
-386 time periods (1992-02-01 - 2024-03-01)
+406 time periods (1992-02-01 - 2025-11-01)
 12 periods forecast
 4000 draws used in main chain
 NULL

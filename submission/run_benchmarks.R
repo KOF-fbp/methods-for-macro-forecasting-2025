@@ -113,12 +113,12 @@ monthly_raw <- read_combined_timeseries(
 )
 
 # Trim quarterly data to overlap with monthly indicators
-trimmed <- trim_to_overlap(qdat_raw, monthly_raw$ts_list)
+trimmed <- trim_to_overlap(qdat_raw, monthly_raw$ts_list, mode = "ragged", fill_method = "locf")
 qdat_orig <- trimmed$qdat
-monthly_series_list <- window_monthly_series(trimmed$monthly, qdat_orig)
+monthly_series_list <- window_monthly_series(trimmed$monthly, qdat_orig, end_mode = "available")
 
 # Also prepare KOF Barometer for MIDAS-KOF models
-baro_ts <- window_baro(baro_raw, qdat_orig)
+baro_ts <- window_baro(baro_raw, qdat_orig, end_mode = "available")
 
 stationary <- stationarise_quarterly(qdat_orig)
 qdat_adj <- stationary$data
