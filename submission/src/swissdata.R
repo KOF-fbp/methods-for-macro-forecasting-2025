@@ -80,17 +80,16 @@ tail(amarbma_t0)
 
 plkopr_fin <- plkopr |>
   mutate(date = as.Date(date)) |>
+  filter(overview == "ld2010100") |>
   select(date, plkopr = value)
 
 tail(plkopr_fin)
 # the other 2 are already filtered
 
 
-setwd("/Users/minna/Code/Macro_Forecasting/group_project/methods-for-macro-forecasting-2025/submission/data/")
 # source smi.R which fetches monthly smi data
 setwd("/Users/minna/Code/Macro_Forecasting/group_project/methods-for-macro-forecasting-2025/submission/src")
 source("smi.R")
-
 
 # Combine series with named columns & smi
 
@@ -101,6 +100,6 @@ combined_df <- reduce(series_list, full_join, by = "date") |>
 
 tail(combined_df, n=10)
 
-
+setwd("/Users/minna/Code/Macro_Forecasting/group_project/methods-for-macro-forecasting-2025/submission/data/")
 write.csv(combined_df, "combined_timeseries.csv")
 
