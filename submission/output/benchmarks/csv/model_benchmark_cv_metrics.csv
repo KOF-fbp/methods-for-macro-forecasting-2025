@@ -1,109 +1,109 @@
 extra_months,variable,monthly_coverage,model,horizon,rmse,mae,observations
-0,exch_rate,Cutoff only,AR(2),1-step ahead,0.01861459219661924,0.01825167335915756,2
-0,exch_rate,Cutoff only,AR(2),1-year ahead,0.02509075101191454,0.0212702556933523,2
-0,exch_rate,Cutoff only,MF-VAR,1-step ahead,0.01405558881323639,0.01405556301126808,2
-0,exch_rate,Cutoff only,MF-VAR,1-year ahead,0.02277051434685451,0.02042568558829568,2
-0,exch_rate,Cutoff only,MIDAS,1-step ahead,0.02079098290508064,0.01942684918084001,2
-0,exch_rate,Cutoff only,MIDAS,1-year ahead,0.01384754681666048,0.01284398837206402,2
-0,exch_rate,Cutoff only,MIDAS (trend),1-step ahead,0.01994884913390995,0.01820243927474548,2
-0,exch_rate,Cutoff only,MIDAS (trend),1-year ahead,0.01246698616238432,0.01113611413197328,2
-0,exch_rate,Cutoff only,MIDAS-Latent,1-step ahead,0.02397075087608087,0.0207097780688756,2
-0,exch_rate,Cutoff only,MIDAS-Latent,1-year ahead,0.01761378789649208,0.0145046351997925,2
-0,exch_rate,Cutoff only,MIDAS-Latent (trend),1-step ahead,0.02148682513586958,0.02129821627172668,2
-0,exch_rate,Cutoff only,MIDAS-Latent (trend),1-year ahead,0.01521557354554053,0.01472309148316071,2
-0,gdp_growth,Cutoff only,AR(2),1-step ahead,0.4354380396927506,0.3763395251477344,2
-0,gdp_growth,Cutoff only,AR(2),1-year ahead,2.2527399468945286,2.1474977619273807,2
-0,gdp_growth,Cutoff only,MF-VAR,1-step ahead,1.0724196285962746,1.009214207558875,2
-0,gdp_growth,Cutoff only,MF-VAR,1-year ahead,1.5426886631234835,1.482014530169943,2
-0,gdp_growth,Cutoff only,MIDAS,1-step ahead,0.2828473052054611,0.27422087665612804,2
-0,gdp_growth,Cutoff only,MIDAS,1-year ahead,1.9742512612146792,1.9742425216839108,2
-0,gdp_growth,Cutoff only,MIDAS (trend),1-step ahead,0.13935732078301594,0.11677089144787124,2
-0,gdp_growth,Cutoff only,MIDAS (trend),1-year ahead,1.5543170095880836,1.5542605477235791,2
-0,gdp_growth,Cutoff only,MIDAS-Latent,1-step ahead,2.38745709129735,2.1303422612426894,2
-0,gdp_growth,Cutoff only,MIDAS-Latent,1-year ahead,3.608868231470032,2.770047083366305,2
-0,gdp_growth,Cutoff only,MIDAS-Latent (trend),1-step ahead,2.328640594361333,2.128176677214885,2
-0,gdp_growth,Cutoff only,MIDAS-Latent (trend),1-year ahead,3.493639266969893,2.6206493091860015,2
-0,inflation,Cutoff only,AR(2),1-step ahead,0.6387009277614469,0.5886288764196153,2
-0,inflation,Cutoff only,AR(2),1-year ahead,0.39260308418120177,0.39218011794368424,2
-0,inflation,Cutoff only,MF-VAR,1-step ahead,0.909207857531116,0.6897474486225945,2
-0,inflation,Cutoff only,MF-VAR,1-year ahead,0.8027951567339227,0.7175390173658487,2
-0,inflation,Cutoff only,MIDAS,1-step ahead,0.969761026371062,0.966907544022234,2
-0,inflation,Cutoff only,MIDAS,1-year ahead,0.5527846058918716,0.4058324347107451,2
-0,inflation,Cutoff only,MIDAS (trend),1-step ahead,0.781021911929013,0.7784132786866896,2
-0,inflation,Cutoff only,MIDAS (trend),1-year ahead,0.40696367210659734,0.3796917747919439,2
-0,inflation,Cutoff only,MIDAS-Latent,1-step ahead,1.2990002565519652,1.2739068144047612,2
-0,inflation,Cutoff only,MIDAS-Latent,1-year ahead,1.1022634853700868,0.9348417045427676,2
-0,inflation,Cutoff only,MIDAS-Latent (trend),1-step ahead,1.0059985023086913,0.9658684320024054,2
-0,inflation,Cutoff only,MIDAS-Latent (trend),1-year ahead,0.8488375040874923,0.6061611641733904,2
-1,exch_rate,Cutoff +1m,AR(2),1-step ahead,0.01861459219661924,0.01825167335915756,2
-1,exch_rate,Cutoff +1m,AR(2),1-year ahead,0.02509075101191454,0.0212702556933523,2
-1,exch_rate,Cutoff +1m,MF-VAR,1-step ahead,0.01297217348296391,0.01210669173728542,2
-1,exch_rate,Cutoff +1m,MF-VAR,1-year ahead,0.02921092770475116,0.02417609780147709,2
-1,exch_rate,Cutoff +1m,MIDAS,1-step ahead,0.0190207394545274,0.01888178610956868,2
-1,exch_rate,Cutoff +1m,MIDAS,1-year ahead,0.01384754681666048,0.01284398837206402,2
-1,exch_rate,Cutoff +1m,MIDAS (trend),1-step ahead,0.0179697360988387,0.01767611829280305,2
-1,exch_rate,Cutoff +1m,MIDAS (trend),1-year ahead,0.01246698616238432,0.01113611413197328,2
-1,exch_rate,Cutoff +1m,MIDAS-Latent,1-step ahead,0.02398062144834899,0.02075051832428404,2
-1,exch_rate,Cutoff +1m,MIDAS-Latent,1-year ahead,0.017487462295508,0.01440817169251487,2
-1,exch_rate,Cutoff +1m,MIDAS-Latent (trend),1-step ahead,0.02174000232796126,0.02157925152352005,2
-1,exch_rate,Cutoff +1m,MIDAS-Latent (trend),1-year ahead,0.01550031911728511,0.01497394156046222,2
-1,gdp_growth,Cutoff +1m,AR(2),1-step ahead,0.4354380396927506,0.3763395251477344,2
-1,gdp_growth,Cutoff +1m,AR(2),1-year ahead,2.2527399468945286,2.1474977619273807,2
-1,gdp_growth,Cutoff +1m,MF-VAR,1-step ahead,1.5517356500924044,1.2528893187642074,2
-1,gdp_growth,Cutoff +1m,MF-VAR,1-year ahead,1.1225720912948398,1.0466718684272296,2
-1,gdp_growth,Cutoff +1m,MIDAS,1-step ahead,0.8489996458149801,0.8473418837485508,2
-1,gdp_growth,Cutoff +1m,MIDAS,1-year ahead,1.9742512612146792,1.9742425216839108,2
-1,gdp_growth,Cutoff +1m,MIDAS (trend),1-step ahead,1.2455927657853776,1.2447244883104132,2
-1,gdp_growth,Cutoff +1m,MIDAS (trend),1-year ahead,1.5543170095880836,1.5542605477235791,2
-1,gdp_growth,Cutoff +1m,MIDAS-Latent,1-step ahead,2.794556921574358,2.247801996021681,2
-1,gdp_growth,Cutoff +1m,MIDAS-Latent,1-year ahead,4.186153738272673,3.399410458084174,2
-1,gdp_growth,Cutoff +1m,MIDAS-Latent (trend),1-step ahead,2.709948771674478,2.2398583327086428,2
-1,gdp_growth,Cutoff +1m,MIDAS-Latent (trend),1-year ahead,4.057610773653704,3.246880094019001,2
-1,inflation,Cutoff +1m,AR(2),1-step ahead,0.6387009277614469,0.5886288764196153,2
-1,inflation,Cutoff +1m,AR(2),1-year ahead,0.39260308418120177,0.39218011794368424,2
-1,inflation,Cutoff +1m,MF-VAR,1-step ahead,0.9763784024781712,0.8508648692078111,2
-1,inflation,Cutoff +1m,MF-VAR,1-year ahead,0.9529658139419536,0.7829487326180191,2
-1,inflation,Cutoff +1m,MIDAS,1-step ahead,0.9035872214612553,0.9011438340804092,2
-1,inflation,Cutoff +1m,MIDAS,1-year ahead,0.5527846058918716,0.4058324347107451,2
-1,inflation,Cutoff +1m,MIDAS (trend),1-step ahead,0.7133940413211416,0.71120791341773,2
-1,inflation,Cutoff +1m,MIDAS (trend),1-year ahead,0.40696367210659734,0.3796917747919439,2
-1,inflation,Cutoff +1m,MIDAS-Latent,1-step ahead,1.3650427330946602,1.3422296102156797,2
-1,inflation,Cutoff +1m,MIDAS-Latent,1-year ahead,1.160743801710647,1.0070068276075903,2
-1,inflation,Cutoff +1m,MIDAS-Latent (trend),1-step ahead,1.0776014951257722,1.042366120202903,2
-1,inflation,Cutoff +1m,MIDAS-Latent (trend),1-year ahead,0.9013972219391488,0.684667181215597,2
-2,exch_rate,Cutoff +2m,AR(2),1-step ahead,0.01861459219661924,0.01825167335915756,2
-2,exch_rate,Cutoff +2m,AR(2),1-year ahead,0.02509075101191454,0.0212702556933523,2
-2,exch_rate,Cutoff +2m,MF-VAR,1-step ahead,0.00380210268642368,0.00317794454484271,2
-2,exch_rate,Cutoff +2m,MF-VAR,1-year ahead,0.01210678041588504,0.01127003396372869,2
-2,exch_rate,Cutoff +2m,MIDAS,1-step ahead,0.01608857017570188,0.0152688291438101,2
-2,exch_rate,Cutoff +2m,MIDAS,1-year ahead,0.01384754681666048,0.01284398837206402,2
-2,exch_rate,Cutoff +2m,MIDAS (trend),1-step ahead,0.01563105653983785,0.01459191531974399,2
-2,exch_rate,Cutoff +2m,MIDAS (trend),1-year ahead,0.01246698616238432,0.01113611413197328,2
-2,exch_rate,Cutoff +2m,MIDAS-Latent,1-step ahead,0.02404652709493047,0.02080942457656294,2
-2,exch_rate,Cutoff +2m,MIDAS-Latent,1-year ahead,0.01747461123591501,0.01446594183228255,2
-2,exch_rate,Cutoff +2m,MIDAS-Latent (trend),1-step ahead,0.0219182411538848,0.02171295768601233,2
-2,exch_rate,Cutoff +2m,MIDAS-Latent (trend),1-year ahead,0.01556150709145589,0.01511598349347582,2
-2,gdp_growth,Cutoff +2m,AR(2),1-step ahead,0.4354380396927506,0.3763395251477344,2
-2,gdp_growth,Cutoff +2m,AR(2),1-year ahead,2.2527399468945286,2.1474977619273807,2
-2,gdp_growth,Cutoff +2m,MF-VAR,1-step ahead,2.286556960552042,2.006241128953927,2
-2,gdp_growth,Cutoff +2m,MF-VAR,1-year ahead,1.2927732602636637,1.261889747682705,2
-2,gdp_growth,Cutoff +2m,MIDAS,1-step ahead,0.743285229211284,0.7034494620615022,2
-2,gdp_growth,Cutoff +2m,MIDAS,1-year ahead,1.9742512612146792,1.9742425216839108,2
-2,gdp_growth,Cutoff +2m,MIDAS (trend),1-step ahead,1.1333640567188956,1.1118573486575252,2
-2,gdp_growth,Cutoff +2m,MIDAS (trend),1-year ahead,1.5543170095880836,1.5542605477235791,2
-2,gdp_growth,Cutoff +2m,MIDAS-Latent,1-step ahead,2.723196338220131,2.021682982815343,2
-2,gdp_growth,Cutoff +2m,MIDAS-Latent,1-year ahead,4.283034960587384,3.79430536254518,2
-2,gdp_growth,Cutoff +2m,MIDAS-Latent (trend),1-step ahead,2.630952547609984,1.8899795453653632,2
-2,gdp_growth,Cutoff +2m,MIDAS-Latent (trend),1-year ahead,4.154457307314012,3.6455839904886433,2
-2,inflation,Cutoff +2m,AR(2),1-step ahead,0.6387009277614469,0.5886288764196153,2
-2,inflation,Cutoff +2m,AR(2),1-year ahead,0.39260308418120177,0.39218011794368424,2
-2,inflation,Cutoff +2m,MF-VAR,1-step ahead,0.95414484309838965,0.8249128885925427,2
-2,inflation,Cutoff +2m,MF-VAR,1-year ahead,0.8765915866044929,0.6726004151426144,2
-2,inflation,Cutoff +2m,MIDAS,1-step ahead,0.888859799313891,0.8844067930591684,2
-2,inflation,Cutoff +2m,MIDAS,1-year ahead,0.5527846058918716,0.4058324347107451,2
-2,inflation,Cutoff +2m,MIDAS (trend),1-step ahead,0.6943897815576752,0.6891471873681676,2
-2,inflation,Cutoff +2m,MIDAS (trend),1-year ahead,0.40696367210659734,0.3796917747919439,2
-2,inflation,Cutoff +2m,MIDAS-Latent,1-step ahead,1.4026308157278928,1.3851322664169352,2
-2,inflation,Cutoff +2m,MIDAS-Latent,1-year ahead,1.1879982038000243,1.0535754444141685,2
-2,inflation,Cutoff +2m,MIDAS-Latent (trend),1-step ahead,1.1146336906481114,1.0870081854217195,2
-2,inflation,Cutoff +2m,MIDAS-Latent (trend),1-year ahead,0.9205021901178216,0.7309884607244646,2
+0,exch_rate,Cutoff only,AR(2),1-step ahead,0.019964062717335685,0.016516938864469144,10
+0,exch_rate,Cutoff only,AR(2),1-year ahead,0.02248978697443455,0.017314085020840964,10
+0,exch_rate,Cutoff only,MF-VAR,1-step ahead,0.019364528725024907,0.015267534214596415,10
+0,exch_rate,Cutoff only,MF-VAR,1-year ahead,0.039508686573722196,0.03137845558287612,10
+0,exch_rate,Cutoff only,MIDAS,1-step ahead,0.03292522267679971,0.02962370995278124,10
+0,exch_rate,Cutoff only,MIDAS,1-year ahead,0.034787301576785716,0.02655474860693076,10
+0,exch_rate,Cutoff only,MIDAS (trend),1-step ahead,0.031677609949575046,0.028459025856746357,10
+0,exch_rate,Cutoff only,MIDAS (trend),1-year ahead,0.03242524343247919,0.025119437373567612,10
+0,exch_rate,Cutoff only,MIDAS-Latent,1-step ahead,0.02882543073255994,0.024025252125118652,10
+0,exch_rate,Cutoff only,MIDAS-Latent,1-year ahead,0.018530195290778068,0.013947118601591377,10
+0,exch_rate,Cutoff only,MIDAS-Latent (trend),1-step ahead,0.022335346753635566,0.01876145068090148,10
+0,exch_rate,Cutoff only,MIDAS-Latent (trend),1-year ahead,0.015929113464754275,0.013288498913149397,10
+0,gdp_growth,Cutoff only,AR(2),1-step ahead,2.3740126782798847,1.9937020709207827,10
+0,gdp_growth,Cutoff only,AR(2),1-year ahead,1.9223541780294546,1.5760794846006192,10
+0,gdp_growth,Cutoff only,MF-VAR,1-step ahead,2.873519311193992,2.19414553015429,10
+0,gdp_growth,Cutoff only,MF-VAR,1-year ahead,2.409633867862801,2.206860784657842,10
+0,gdp_growth,Cutoff only,MIDAS,1-step ahead,2.8159672083301968,2.1697818404491325,10
+0,gdp_growth,Cutoff only,MIDAS,1-year ahead,2.070987483195291,1.6071844957914099,10
+0,gdp_growth,Cutoff only,MIDAS (trend),1-step ahead,2.5657553146133294,1.9414790050020838,10
+0,gdp_growth,Cutoff only,MIDAS (trend),1-year ahead,1.816042558985319,1.4578870946198355,10
+0,gdp_growth,Cutoff only,MIDAS-Latent,1-step ahead,3.8143134325099717,3.351873280349101,10
+0,gdp_growth,Cutoff only,MIDAS-Latent,1-year ahead,3.9105981937895913,2.9920008202464032,10
+0,gdp_growth,Cutoff only,MIDAS-Latent (trend),1-step ahead,3.7898478682902015,3.3477443137292013,10
+0,gdp_growth,Cutoff only,MIDAS-Latent (trend),1-year ahead,3.86662538965608,2.9311902458866355,10
+0,inflation,Cutoff only,AR(2),1-step ahead,0.9723920095525224,0.8193922145853733,10
+0,inflation,Cutoff only,AR(2),1-year ahead,0.6173014037608382,0.5494571963554873,10
+0,inflation,Cutoff only,MF-VAR,1-step ahead,1.3166231815502618,1.0363712863562065,10
+0,inflation,Cutoff only,MF-VAR,1-year ahead,0.8840590867512862,0.7064701193521397,10
+0,inflation,Cutoff only,MIDAS,1-step ahead,0.9997684286917282,0.8600038416681111,10
+0,inflation,Cutoff only,MIDAS,1-year ahead,0.626592267478217,0.5516029220986934,10
+0,inflation,Cutoff only,MIDAS (trend),1-step ahead,1.1249259450254605,0.8741326145275572,10
+0,inflation,Cutoff only,MIDAS (trend),1-year ahead,0.6319697423321662,0.5477572507065209,10
+0,inflation,Cutoff only,MIDAS-Latent,1-step ahead,1.1106564248196784,0.8720002532297763,10
+0,inflation,Cutoff only,MIDAS-Latent,1-year ahead,1.458032476395819,1.239255884711145,10
+0,inflation,Cutoff only,MIDAS-Latent (trend),1-step ahead,1.0202808029231742,0.8516451733281087,10
+0,inflation,Cutoff only,MIDAS-Latent (trend),1-year ahead,1.1741563228782053,0.9782537341409786,10
+1,exch_rate,Cutoff +1m,AR(2),1-step ahead,0.019964062717335685,0.016516938864469144,10
+1,exch_rate,Cutoff +1m,AR(2),1-year ahead,0.02248978697443455,0.017314085020840964,10
+1,exch_rate,Cutoff +1m,MF-VAR,1-step ahead,0.011031642680866365,0.009774609569373196,10
+1,exch_rate,Cutoff +1m,MF-VAR,1-year ahead,0.037229840984319834,0.029592675507490656,10
+1,exch_rate,Cutoff +1m,MIDAS,1-step ahead,0.026549585914305052,0.022047796777824764,10
+1,exch_rate,Cutoff +1m,MIDAS,1-year ahead,0.034787301576785716,0.02655474860693076,10
+1,exch_rate,Cutoff +1m,MIDAS (trend),1-step ahead,0.025431642706000988,0.020882939551303496,10
+1,exch_rate,Cutoff +1m,MIDAS (trend),1-year ahead,0.03242524343247919,0.025119437373567612,10
+1,exch_rate,Cutoff +1m,MIDAS-Latent,1-step ahead,0.02884897719510464,0.024042387540086183,10
+1,exch_rate,Cutoff +1m,MIDAS-Latent,1-year ahead,0.01852676385313459,0.01389401181402857,10
+1,exch_rate,Cutoff +1m,MIDAS-Latent (trend),1-step ahead,0.022904702148288734,0.019154089246777715,10
+1,exch_rate,Cutoff +1m,MIDAS-Latent (trend),1-year ahead,0.016219215401523625,0.01346024325613777,10
+1,gdp_growth,Cutoff +1m,AR(2),1-step ahead,2.3740126782798847,1.9937020709207827,10
+1,gdp_growth,Cutoff +1m,AR(2),1-year ahead,1.9223541780294546,1.5760794846006192,10
+1,gdp_growth,Cutoff +1m,MF-VAR,1-step ahead,4.880746407167825,3.8890735329817367,10
+1,gdp_growth,Cutoff +1m,MF-VAR,1-year ahead,2.8552491719161694,2.383545521235461,10
+1,gdp_growth,Cutoff +1m,MIDAS,1-step ahead,2.747242724544916,2.1084316606174354,10
+1,gdp_growth,Cutoff +1m,MIDAS,1-year ahead,2.070987483195291,1.6071844957914099,10
+1,gdp_growth,Cutoff +1m,MIDAS (trend),1-step ahead,2.735696875735811,2.121533288750246,10
+1,gdp_growth,Cutoff +1m,MIDAS (trend),1-year ahead,1.816042558985319,1.4578870946198355,10
+1,gdp_growth,Cutoff +1m,MIDAS-Latent,1-step ahead,3.8030646031586093,2.8322568128500807,10
+1,gdp_growth,Cutoff +1m,MIDAS-Latent,1-year ahead,4.14524250565322,3.0161886184166447,10
+1,gdp_growth,Cutoff +1m,MIDAS-Latent (trend),1-step ahead,3.7845527271667883,2.825894004448318,10
+1,gdp_growth,Cutoff +1m,MIDAS-Latent (trend),1-year ahead,4.113722556195603,3.0053140098228273,10
+1,inflation,Cutoff +1m,AR(2),1-step ahead,0.9723920095525224,0.8193922145853733,10
+1,inflation,Cutoff +1m,AR(2),1-year ahead,0.6173014037608382,0.5494571963554873,10
+1,inflation,Cutoff +1m,MF-VAR,1-step ahead,1.0311404863746743,0.894233011672053,10
+1,inflation,Cutoff +1m,MF-VAR,1-year ahead,0.9131809046118995,0.7889508388882923,10
+1,inflation,Cutoff +1m,MIDAS,1-step ahead,1.02730424012202,0.857539038263564,10
+1,inflation,Cutoff +1m,MIDAS,1-year ahead,0.626592267478217,0.5516029220986934,10
+1,inflation,Cutoff +1m,MIDAS (trend),1-step ahead,1.1674393822250404,0.9084855427792952,10
+1,inflation,Cutoff +1m,MIDAS (trend),1-year ahead,0.6319697423321662,0.5477572507065209,10
+1,inflation,Cutoff +1m,MIDAS-Latent,1-step ahead,1.1837327921183323,0.9353041266934258,10
+1,inflation,Cutoff +1m,MIDAS-Latent,1-year ahead,1.4557072122418075,1.2267093759325285,10
+1,inflation,Cutoff +1m,MIDAS-Latent (trend),1-step ahead,1.1088690815928053,0.913248336255122,10
+1,inflation,Cutoff +1m,MIDAS-Latent (trend),1-year ahead,1.18377470795855,1.0214399640693235,10
+2,exch_rate,Cutoff +2m,AR(2),1-step ahead,0.019964062717335685,0.016516938864469144,10
+2,exch_rate,Cutoff +2m,AR(2),1-year ahead,0.02248978697443455,0.017314085020840964,10
+2,exch_rate,Cutoff +2m,MF-VAR,1-step ahead,0.0058754753345874764,0.004736404655991121,10
+2,exch_rate,Cutoff +2m,MF-VAR,1-year ahead,0.031641256892978496,0.025811997799334168,10
+2,exch_rate,Cutoff +2m,MIDAS,1-step ahead,0.025745265963082804,0.022201896806857555,10
+2,exch_rate,Cutoff +2m,MIDAS,1-year ahead,0.034787301576785716,0.02655474860693076,10
+2,exch_rate,Cutoff +2m,MIDAS (trend),1-step ahead,0.024724786625017522,0.020991075770678377,10
+2,exch_rate,Cutoff +2m,MIDAS (trend),1-year ahead,0.03242524343247919,0.025119437373567612,10
+2,exch_rate,Cutoff +2m,MIDAS-Latent,1-step ahead,0.02884135347241614,0.024021489675767622,10
+2,exch_rate,Cutoff +2m,MIDAS-Latent,1-year ahead,0.018600239616235352,0.014037976307186922,10
+2,exch_rate,Cutoff +2m,MIDAS-Latent (trend),1-step ahead,0.022978133156828576,0.019177398018128174,10
+2,exch_rate,Cutoff +2m,MIDAS-Latent (trend),1-year ahead,0.01634396962702572,0.013574408496081044,10
+2,gdp_growth,Cutoff +2m,AR(2),1-step ahead,2.3740126782798847,1.9937020709207827,10
+2,gdp_growth,Cutoff +2m,AR(2),1-year ahead,1.9223541780294546,1.5760794846006192,10
+2,gdp_growth,Cutoff +2m,MF-VAR,1-step ahead,5.211907076018103,4.233490208444515,10
+2,gdp_growth,Cutoff +2m,MF-VAR,1-year ahead,2.9341096305660215,2.4325159812552855,10
+2,gdp_growth,Cutoff +2m,MIDAS,1-step ahead,2.763592594419407,2.1077324890112767,10
+2,gdp_growth,Cutoff +2m,MIDAS,1-year ahead,2.070987483195291,1.6071844957914099,10
+2,gdp_growth,Cutoff +2m,MIDAS (trend),1-step ahead,2.752793536655023,2.154552968379218,10
+2,gdp_growth,Cutoff +2m,MIDAS (trend),1-year ahead,1.816042558985319,1.4578870946198355,10
+2,gdp_growth,Cutoff +2m,MIDAS-Latent,1-step ahead,3.4871625617926116,2.639348395572836,10
+2,gdp_growth,Cutoff +2m,MIDAS-Latent,1-year ahead,3.862155382022073,2.7250537419296523,10
+2,gdp_growth,Cutoff +2m,MIDAS-Latent (trend),1-step ahead,3.4706700365187397,2.6223342270549277,10
+2,gdp_growth,Cutoff +2m,MIDAS-Latent (trend),1-year ahead,3.8149445805925746,2.6906282543522346,10
+2,inflation,Cutoff +2m,AR(2),1-step ahead,0.9723920095525224,0.8193922145853733,10
+2,inflation,Cutoff +2m,AR(2),1-year ahead,0.6173014037608382,0.5494571963554873,10
+2,inflation,Cutoff +2m,MF-VAR,1-step ahead,1.0685977648424188,0.8801184471693284,10
+2,inflation,Cutoff +2m,MF-VAR,1-year ahead,0.9090108470630506,0.7686145577990573,10
+2,inflation,Cutoff +2m,MIDAS,1-step ahead,1.013098010811036,0.8527237801899065,10
+2,inflation,Cutoff +2m,MIDAS,1-year ahead,0.626592267478217,0.5516029220986934,10
+2,inflation,Cutoff +2m,MIDAS (trend),1-step ahead,1.1415548984596886,0.877050492920709,10
+2,inflation,Cutoff +2m,MIDAS (trend),1-year ahead,0.6319697423321662,0.5477572507065209,10
+2,inflation,Cutoff +2m,MIDAS-Latent,1-step ahead,1.2573878152425353,0.9793536665838765,10
+2,inflation,Cutoff +2m,MIDAS-Latent,1-year ahead,1.4991582984233818,1.2694517259111986,10
+2,inflation,Cutoff +2m,MIDAS-Latent (trend),1-step ahead,1.1670729836297555,0.9692333618138211,10
+2,inflation,Cutoff +2m,MIDAS-Latent (trend),1-year ahead,1.2152941319106825,1.0540038679225203,10

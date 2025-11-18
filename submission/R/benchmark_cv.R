@@ -60,6 +60,8 @@ run_cv_fold <- function(idx,
                         progress,
                         position,
                         total_folds) {
+  fold_start_time <- Sys.time()
+  
   train_rows <- idx - 1L
   if (train_rows <= n_lags) {
     if (progress) {
@@ -200,8 +202,10 @@ execute_cv_folds <- function(plan,
   predictions_list <- list()
   actual_list <- list()
   timings_info <- list()
+  fold_times <- numeric()
 
   for (pos in seq_along(plan$cv_indices)) {
+    fold_start <- Sys.time()
     idx <- plan$cv_indices[pos]
     fold_result <- run_cv_fold(
       idx = idx,
@@ -226,6 +230,19 @@ execute_cv_folds <- function(plan,
       predictions_list[[length(predictions_list) + 1L]] <- fold_result$predictions
       actual_list[[length(actual_list) + 1L]] <- fold_result$actual
       timings_info[[length(timings_info) + 1L]] <- fold_result$timings
+      
+      # Track fold time and report progress
+      fold_elapsed <- as.numeric(difftime(Sys.time(), fold_start, units = "secs"))
+      fold_times <- c(fold_times, fold_elapsed)
+      
+      if (progress && pos > 0) {
+        avg_time <- mean(fold_times)
+        remaining_folds <- plan$total_folds - pos
+        est_remaining <- avg_time * remaining_folds
+        
+        message(sprintf("    Completed in %.1f sec | Avg: %.1f sec/fold | Est. remaining: %.1f min",
+                       fold_elapsed, avg_time, est_remaining / 60))
+      }
     }
   }
 

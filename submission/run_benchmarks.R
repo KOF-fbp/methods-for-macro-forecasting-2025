@@ -251,7 +251,7 @@ if (fast_mode) {
 if (!length(cv_extra_months)) cv_extra_months <- 0L
 
 # Set to 2 folds per user request
-cv_max_folds <- 20L
+cv_max_folds <- 10L
 if (!is.na(max_folds_override)) {
   cv_max_folds <- max_folds_override
 }
