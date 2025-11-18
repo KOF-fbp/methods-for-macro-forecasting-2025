@@ -63,3 +63,5 @@ IMPLEMENTATION_SUMMARY.md
 # ignore ide specifics
 
 /*/.vscode
+# Large model files (>100MB GitHub limit)
+submission/output/forecasts/mfvar/models/*.rds
