@@ -276,17 +276,18 @@ summarise_cv_results <- function(predictions_tbl, actual_tbl, forecast_steps) {
     ) |>
     dplyr::mutate(error = prediction - actual)
 
+  # Changed to group by variable for per-variable error reporting
   metrics_by_horizon <- cv_results |>
     dplyr::filter(step_ahead %in% forecast_steps) |>
-    dplyr::group_by(extra_months, model, horizon) |>
+    dplyr::group_by(extra_months, variable, model, horizon) |>
     summarise_metrics() |>
-    dplyr::arrange(extra_months, model, horizon)
+    dplyr::arrange(extra_months, variable, model, horizon)
 
   metrics_overall <- cv_results |>
     dplyr::filter(step_ahead %in% forecast_steps) |>
-    dplyr::group_by(extra_months, model) |>
+    dplyr::group_by(extra_months, variable, model) |>
     summarise_metrics() |>
-    dplyr::arrange(extra_months, model)
+    dplyr::arrange(extra_months, variable, model)
 
   folds_info <- cv_results |>
     dplyr::distinct(fold_index, cutoff_quarter, forecast_quarter) |>

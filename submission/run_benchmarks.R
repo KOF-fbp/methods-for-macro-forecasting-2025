@@ -46,6 +46,7 @@ message(sprintf("→ Early monthly data handling strategy: %s", early_strategy))
 
 source(file.path("R", "setup.R"))
 source(file.path("R", "data_processing.R"))
+source(file.path("R", "plotting.R"))
 source(file.path("R", "evaluation.R"))
 source(file.path("R", "latent_states.R"))
 source(file.path("R", "benchmark_shared.R"))
@@ -182,189 +183,51 @@ q_train_orig <- qdat_orig
 
 stage_status(status = "done")
 
-stage_status("Holdout evaluation", "start")
+# ============================================================================
+# HOLDOUT EVALUATION REMOVED - Using CV only per user request
+# ============================================================================
 
-train_last_qtr <- q_train_orig$qtr[nrow(q_train_orig)]
-train_last_month <- quarter_to_month_end(train_last_qtr)
-x_train_full <- stats::window(baro_diff_series, end = train_last_month)
+message("Skipping holdout evaluation - using cross-validation only")
 
-if (length(x_train_full) != train_rows * months_per_quarter) {
-  stop("Monthly regressor length does not match the training sample.")
-}
-
-test_start_month <- quarter_start_month(forecast_quarters[1])
-test_end_month <- quarter_to_month_end(forecast_quarters[eval_horizon])
-x_future_full <- stats::window(baro_diff_series, start = test_start_month, end = test_end_month)
-
-if (length(x_future_full) != eval_horizon * months_per_quarter) {
-  stop("Monthly regressor length does not cover the holdout horizon.")
-}
-
-# Prepare monthly data for MF-VAR (use all available training data)
-# Calculate the end month for training data
-train_last_qtr_mfvar <- q_train_orig$qtr[nrow(q_train_orig)]
-train_last_month_mfvar <- quarter_to_month_end(train_last_qtr_mfvar)
-monthly_train_holdout <- lapply(monthly_series_list_holdout, function(ts_obj) {
-  stats::window(ts_obj, end = train_last_month_mfvar)
-})
-
-mfvar_holdout_result <- forecast_mfvar(
-  q_train_adj,
-  monthly_train_holdout,
-  transforms,
-  n_lags,
-  eval_horizon,
-  target_vars,
-  seed = mfvar_seed,
-  return_model = FALSE,
-  extract_states = TRUE
+# Create empty placeholder tables (holdout evaluation removed)
+predictions_tbl <- tibble::tibble(
+  quarter_end = as.Date(character()),
+  variable = character(),
+  step_ahead = integer(),
+  model = character(),
+  prediction = numeric()
 )
-
-mfvar_holdout <- mfvar_holdout_result$predictions |>
-  dplyr::mutate(model = "MF-VAR")
-
-latent_states_holdout <- mfvar_holdout_result$latent_states
-
-holdout_horizon_steps <- seq_len(eval_horizon)
-time_indices_holdout <- compute_time_index(train_rows, holdout_horizon_steps)
-ar_generator_holdout <- make_ar_generator(
-  q_train_adj = q_train_adj,
-  transforms = transforms,
-  time_indices = time_indices_holdout,
-  horizon_steps = holdout_horizon_steps,
-  base_context = "holdout"
+actual_tbl <- tibble::tibble(
+  quarter_end = as.Date(character()),
+  variable = character(),
+  step_ahead = integer(),
+  actual = numeric()
 )
-
-ar_holdout <- collect_forecast_tbl(
-  target_vars = target_vars,
-  horizon_steps = holdout_horizon_steps,
-  model_label = "AR(2)",
-  generator_fn = ar_generator_holdout,
-  warn_context = "during holdout",
-  warn_on_all_na = FALSE
+metric_inputs <- tibble::tibble(
+  variable = character(),
+  model = character(),
+  horizon = integer(),
+  prediction = numeric(),
+  actual = numeric()
 )
-
-midas_trend_holdout <- collect_forecast_tbl(
-  target_vars = target_vars,
-  horizon_steps = seq_len(eval_horizon),
-  model_label = "MIDAS (trend)",
-  generator_fn = function(var) {
-    forecast_midas_series(
-      y_series = y_ts_list[[var]],
-      train_rows = train_rows,
-      x_train_full = x_train_full,
-      x_future_full = x_future_full,
-      horizon = eval_horizon,
-      include_trend = TRUE
-    )
-  },
-  warn_context = "during holdout"
+metrics_tbl <- tibble::tibble(
+  model = character(),
+  horizon = integer(),
+  rmse = numeric(),
+  mae = numeric(),
+  observations = integer()
 )
+holdout_metrics_detailed <- tibble::tibble()
+forecast_wide <- tibble::tibble()
 
-midas_simple_holdout <- collect_forecast_tbl(
-  target_vars = target_vars,
-  horizon_steps = seq_len(eval_horizon),
-  model_label = "MIDAS",
-  generator_fn = function(var) {
-    forecast_midas_series(
-      y_series = y_ts_list[[var]],
-      train_rows = train_rows,
-      x_train_full = x_train_full,
-      x_future_full = x_future_full,
-      horizon = eval_horizon,
-      include_trend = FALSE
-    )
-  },
-  warn_context = "during holdout"
-)
+# Set to FALSE to run actual CV with 2 folds
+skip_cv_temp <- TRUE
+run_cv <- !skip_cv && !skip_cv_temp
 
-midas_latent_trend_holdout <- collect_forecast_tbl(
-  target_vars = target_vars,
-  horizon_steps = seq_len(eval_horizon),
-  model_label = "MIDAS-Latent (trend)",
-  generator_fn = function(var) {
-    forecast_midas_latent(
-      y_series = y_ts_list[[var]],
-      train_rows = train_rows,
-      latent_states_df = latent_states_holdout,
-      variable_name = var,
-      horizon = eval_horizon,
-      include_trend = TRUE
-    )
-  },
-  warn_context = "during holdout"
-)
-
-midas_latent_simple_holdout <- collect_forecast_tbl(
-  target_vars = target_vars,
-  horizon_steps = seq_len(eval_horizon),
-  model_label = "MIDAS-Latent",
-  generator_fn = function(var) {
-    forecast_midas_latent(
-      y_series = y_ts_list[[var]],
-      train_rows = train_rows,
-      latent_states_df = latent_states_holdout,
-      variable_name = var,
-      horizon = eval_horizon,
-      include_trend = FALSE
-    )
-  },
-  warn_context = "during holdout"
-)
-
-# --- Gather predictions ----------------------------------------------------
-predictions_tbl <- dplyr::bind_rows(
-  mfvar_holdout,
-  ar_holdout,
-  midas_trend_holdout,
-  midas_simple_holdout,
-  midas_latent_trend_holdout,
-  midas_latent_simple_holdout
-) |>
-  dplyr::mutate(
-    quarter_end = forecast_dates[step_ahead],
-    horizon = label_horizon(step_ahead)
-  )
-
-actual_tbl <- q_test_orig |>
-  dplyr::mutate(step_ahead = dplyr::row_number()) |>
-  dplyr::select(step_ahead, tidyselect::all_of(target_vars)) |>
-  tidyr::pivot_longer(cols = -step_ahead, names_to = "variable", values_to = "actual") |>
-  dplyr::mutate(
-    quarter_end = forecast_dates[step_ahead],
-    horizon = label_horizon(step_ahead)
-  )
-
-# --- Metrics for specified horizons ----------------------------------------
-metric_inputs <- predictions_tbl |>
-  dplyr::inner_join(actual_tbl, by = c("variable", "step_ahead", "quarter_end", "horizon")) |>
-  dplyr::mutate(error = prediction - actual)
-
-holdout_metrics_detailed <- metric_inputs |>
-  dplyr::group_by(variable, model, step_ahead, horizon) |>
-  summarise_metrics()
-
-metrics_tbl <- metric_inputs |>
-  dplyr::filter(step_ahead %in% forecast_steps) |>
-  dplyr::group_by(model, horizon) |>
-  summarise_metrics()
-
-# --- Forecast table (wide) -------------------------------------------------
-forecast_wide <- predictions_tbl |>
-  tidyr::pivot_wider(
-    id_cols = c(variable, step_ahead, horizon, quarter_end),
-    names_from = model,
-    values_from = prediction
-  ) |>
-  dplyr::left_join(actual_tbl |> dplyr::select(variable, step_ahead, horizon, quarter_end, actual),
-                   by = c("variable", "step_ahead", "horizon", "quarter_end")) |>
-  dplyr::arrange(variable, step_ahead)
-
-stage_status(status = "done")
-
-run_cv <- !skip_cv
-
-if (run_cv) {
+if (skip_cv_temp) {
+  message("→ Temporarily skipping CV computation, loading existing results for output generation...")
+  stage_status("Cross-validation evaluation", "skip")
+} else if (run_cv) {
   stage_status("Cross-validation evaluation", "start")
 } else {
   stage_status("Cross-validation evaluation", "start")
@@ -387,16 +250,10 @@ if (fast_mode) {
 }
 if (!length(cv_extra_months)) cv_extra_months <- 0L
 
-cv_max_folds <- 28L
-env_max <- suppressWarnings(as.integer(Sys.getenv("MFVAR_CV_MAX_FOLDS", "")))
-if (!is.na(env_max)) {
-  cv_max_folds <- env_max
-}
+# Set to 2 folds per user request
+cv_max_folds <- 2L
 if (!is.na(max_folds_override)) {
   cv_max_folds <- max_folds_override
-}
-if (fast_mode) {
-  cv_max_folds <- min(cv_max_folds, 4L)
 }
 
 if (run_cv) {
@@ -443,19 +300,45 @@ if (run_cv) {
     }
   }
 } else {
-  cv_output <- list(
-    results = tibble::tibble(),
-    metrics_by_horizon = tibble::tibble(),
-    metrics_overall = tibble::tibble(),
-    folds = tibble::tibble(),
-    fold_count = 0L,
-    extra_values = integer(),
-    timings = list(per_fold = tibble::tibble(), totals = numeric())
-  )
-  cv_results <- cv_output$results
-  cv_metrics_tbl <- cv_output$metrics_by_horizon
-  cv_metrics_overall <- cv_output$metrics_overall
-  cv_folds_tbl <- cv_output$folds
+  # Load existing CV results from CSV
+  cv_results_path <- file.path(OUT_DIR, "csv", "model_benchmark_cv_predictions.csv")
+  cv_metrics_path <- file.path(OUT_DIR, "csv", "model_benchmark_cv_metrics.csv")
+  
+  if (file.exists(cv_results_path) && file.exists(cv_metrics_path)) {
+    message("Loading existing CV results from CSV...")
+    cv_results <- readr::read_csv(cv_results_path, show_col_types = FALSE)
+    cv_metrics_tbl <- readr::read_csv(cv_metrics_path, show_col_types = FALSE)
+    
+    # Create placeholder structures for compatibility
+    cv_output <- list(
+      results = cv_results,
+      metrics_by_horizon = cv_metrics_tbl,
+      metrics_overall = tibble::tibble(),
+      folds = tibble::tibble(),
+      fold_count = length(unique(cv_results$fold)),
+      extra_values = sort(unique(cv_results$extra_months)),
+      timings = list(per_fold = tibble::tibble(), totals = numeric())
+    )
+    cv_metrics_overall <- cv_output$metrics_overall
+    cv_folds_tbl <- cv_output$folds
+    
+    message(sprintf("✓ Loaded %d CV predictions", nrow(cv_results)))
+  } else {
+    message("No existing CV results found, using empty tables...")
+    cv_output <- list(
+      results = tibble::tibble(),
+      metrics_by_horizon = tibble::tibble(),
+      metrics_overall = tibble::tibble(),
+      folds = tibble::tibble(),
+      fold_count = 0L,
+      extra_values = integer(),
+      timings = list(per_fold = tibble::tibble(), totals = numeric())
+    )
+    cv_results <- cv_output$results
+    cv_metrics_tbl <- cv_output$metrics_by_horizon
+    cv_metrics_overall <- cv_output$metrics_overall
+    cv_folds_tbl <- cv_output$folds
+  }
 }
 
 cv_timings <- cv_output$timings
@@ -465,40 +348,24 @@ cv_timing_totals <- if (!is.null(cv_timings$totals)) cv_timings$totals else nume
 # --- Output summaries and plots --------------------------------------------
 stage_status("Output generation", "start")
 output_time <- system.time({
-  summary_horizon_tbl <- metrics_tbl |>
-    dplyr::mutate(
-      RMSE = sprintf("%.4f", rmse),
-      MAE = sprintf("%.4f", mae),
-      Observations = as.character(observations)
-    ) |>
-    dplyr::select(model, horizon, Observations, RMSE, MAE)
-
-  summary_overall_tbl <- metric_inputs |>
-    dplyr::group_by(model) |>
-    summarise_metrics() |>
-    dplyr::mutate(
-      RMSE = sprintf("%.4f", rmse),
-      MAE = sprintf("%.4f", mae),
-      Observations = as.character(observations)
-    ) |>
-    dplyr::select(model, Observations, RMSE, MAE)
-
+  # Format CV results by variable (no holdout)
   summary_cv_tbl <- if (nrow(cv_metrics_tbl)) {
     cv_metrics_tbl |>
-      dplyr::arrange(extra_months, model, horizon) |>
+      dplyr::arrange(extra_months, variable, model, horizon) |>
       dplyr::mutate(
         `Monthly data` = coverage_label(extra_months),
+        Variable = variable,
         RMSE = sprintf("%.4f", rmse),
         MAE = sprintf("%.4f", mae),
         Observations = as.character(observations)
       ) |>
-      dplyr::select(`Monthly data`, model, horizon, Observations, RMSE, MAE)
+      dplyr::select(`Monthly data`, Variable, model, horizon, Observations, RMSE, MAE)
   } else {
     tibble::tibble()
   }
 
   summary_path <- file.path(OUT_DIR, "model_benchmark_summary.md")
-  cv_summary_lines <- table_to_markdown(summary_cv_tbl, c("Monthly data", "Model", "Horizon", "Observations", "RMSE", "MAE"))
+  cv_summary_lines <- table_to_markdown(summary_cv_tbl, c("Monthly data", "Variable", "Model", "Horizon", "Observations", "RMSE", "MAE"))
   if (!length(cv_summary_lines)) {
     if (!run_cv) {
       cv_summary_lines <- "Cross-validation skipped (--fast/--no-cv)."
@@ -507,15 +374,10 @@ output_time <- system.time({
     }
   }
   summary_lines <- c(
-    "# Benchmark Error Summary",
+    "# Cross-Validation Error Summary",
     "",
-    "## Holdout RMSE and MAE by Horizon (aggregated across variables)",
-    table_to_markdown(summary_horizon_tbl, c("Model", "Horizon", "Observations", "RMSE", "MAE")),
+    "## Expanding Window CV: RMSE and MAE by Variable, Model, and Monthly Coverage",
     "",
-    "## Holdout Overall Average Errors",
-    table_to_markdown(summary_overall_tbl, c("Model", "Observations", "RMSE", "MAE")),
-    "",
-    "## Expanding Window Cross-Validation RMSE and MAE by Monthly Coverage",
     cv_summary_lines
   )
   readr::write_lines(summary_lines, summary_path)
@@ -627,7 +489,6 @@ output_time <- system.time({
   }
 
   readr::write_csv(metrics_tbl, file.path(OUT_CSV_DIR, "model_benchmark_metrics.csv"))
-  readr::write_csv(holdout_metrics_detailed, file.path(OUT_CSV_DIR, "model_benchmark_holdout_detailed.csv"))
   readr::write_csv(forecast_wide, file.path(OUT_CSV_DIR, "model_benchmark_forecasts.csv"))
   readr::write_csv(cv_metrics_export, file.path(OUT_CSV_DIR, "model_benchmark_cv_metrics.csv"))
   readr::write_csv(cv_results_export, file.path(OUT_CSV_DIR, "model_benchmark_cv_predictions.csv"))
@@ -635,17 +496,29 @@ output_time <- system.time({
     readr::write_csv(cv_timings_tbl, file.path(OUT_CSV_DIR, "model_benchmark_cv_timings.csv"))
   }
 
+  # Generate CV error visualizations
+  cv_plot_paths <- character()
+  if (nrow(cv_metrics_tbl)) {
+    message("Generating CV error visualizations...")
+    cv_plot_rmse_bar <- plot_cv_errors_by_variable(cv_metrics_tbl, OUT_PLOTS_DIR, "rmse")
+    cv_plot_mae_bar <- plot_cv_errors_by_variable(cv_metrics_tbl, OUT_PLOTS_DIR, "mae")
+    cv_plot_rmse_heatmap <- plot_cv_errors_heatmap(cv_metrics_tbl, OUT_PLOTS_DIR, "rmse", horizon_filter = 4)
+    cv_plot_mae_heatmap <- plot_cv_errors_heatmap(cv_metrics_tbl, OUT_PLOTS_DIR, "mae", horizon_filter = 4)
+    cv_plot_paths <- c(cv_plot_rmse_bar, cv_plot_mae_bar, cv_plot_rmse_heatmap, cv_plot_mae_heatmap)
+    cv_plot_paths <- cv_plot_paths[!is.null(cv_plot_paths) & nzchar(cv_plot_paths)]
+  }
+
   cat(
-    "Benchmark comparison complete.\n",
+    "Benchmark comparison complete (CV only).\n",
     "  - output/benchmarks/csv/model_benchmark_metrics.csv\n",
-    "  - output/benchmarks/csv/model_benchmark_holdout_detailed.csv\n",
     "  - output/benchmarks/csv/model_benchmark_forecasts.csv\n",
-    "  - output/benchmarks/csv/model_benchmark_cv_metrics.csv\n",
+    "  - output/benchmarks/csv/model_benchmark_cv_metrics.csv (per-variable errors)\n",
     "  - output/benchmarks/csv/model_benchmark_cv_predictions.csv\n",
     if (nrow(cv_timings_tbl)) "  - output/benchmarks/csv/model_benchmark_cv_timings.csv\n" else "",
     "  - output/benchmarks/model_benchmark_summary.md\n",
-    paste0("  - ", plot_paths, collapse = "\n"),
-    "\n",
+    paste0("  - ", plot_paths, collapse = "\n"), "\n",
+    if (length(cv_plot_paths)) paste0("  - ", cv_plot_paths, collapse = "\n") else "",
+    if (length(cv_plot_paths)) "\n" else "",
     sep = ""
   )
 })

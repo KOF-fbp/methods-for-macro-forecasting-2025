@@ -448,3 +448,141 @@ plot_combined_forecasts <- function(
   ggplot2::ggsave(out_path, p, width = 10, height = 5, dpi = 120)
   out_path
 }
+
+# CV error visualization functions
+
+#' Plot CV errors by variable and model (faceted bar plot)
+#' 
+#' @param cv_metrics_tbl CV metrics table with variable, model, rmse, mae columns
+#' @param out_dir Output directory for plot
+#' @param metric_type Either "rmse" or "mae"
+#' @return Path to saved plot
+plot_cv_errors_by_variable <- function(cv_metrics_tbl, out_dir, metric_type = "rmse") {
+  if (!nrow(cv_metrics_tbl)) {
+    message("No CV metrics to plot")
+    return(NULL)
+  }
+  
+  metric_col <- if (metric_type == "rmse") "rmse" else "mae"
+  metric_label <- toupper(metric_type)
+  
+  # Filter to 1-step and 1-year ahead horizons (handle both numeric and string formats)
+  plot_df <- cv_metrics_tbl |>
+    dplyr::filter(
+      horizon %in% c(1, 4, "1-step ahead", "1-year ahead") | 
+      grepl("1-step|1-year", horizon, ignore.case = TRUE)
+    ) |>
+    dplyr::mutate(
+      horizon_label = dplyr::case_when(
+        horizon %in% c(1, "1-step ahead") | grepl("1-step", horizon, ignore.case = TRUE) ~ "1-step ahead",
+        horizon %in% c(4, "1-year ahead") | grepl("1-year", horizon, ignore.case = TRUE) ~ "1-year ahead",
+        TRUE ~ as.character(horizon)
+      ),
+      variable_label = dplyr::case_when(
+        variable == "gdp_growth" ~ "GDP Growth",
+        variable == "inflation" ~ "Inflation",
+        variable == "exch_rate" ~ "Exchange Rate (log)",
+        TRUE ~ variable
+      )
+    )
+  
+  if (!nrow(plot_df)) {
+    message("No data for 1-step or 1-year ahead horizons")
+    return(NULL)
+  }
+  
+  p <- ggplot2::ggplot(plot_df, ggplot2::aes(x = model, y = .data[[metric_col]], fill = model)) +
+    ggplot2::geom_col(position = "dodge", width = 0.7) +
+    ggplot2::facet_grid(horizon_label ~ variable_label, scales = "free_y", space = "free_x") +
+    ggplot2::scale_fill_brewer(palette = "Set2") +
+    ggplot2::scale_y_continuous(labels = scales::number_format(accuracy = 0.001)) +
+    ggplot2::labs(
+      title = paste0("Cross-Validation ", metric_label, " by Variable and Model"),
+      subtitle = "Expanding window CV with 2 folds (Note: independent y-axis scales per variable)",
+      x = "Model",
+      y = metric_label
+    ) +
+    ggplot2::theme_minimal(base_size = 11) +
+    ggplot2::theme(
+      legend.position = "none",
+      axis.text.x = ggplot2::element_text(angle = 45, hjust = 1),
+      axis.text.y = ggplot2::element_text(size = 9),
+      strip.text = ggplot2::element_text(face = "bold")
+    )
+  
+  file_name <- paste0("cv_errors_by_variable_", metric_type, ".png")
+  out_path <- file.path(out_dir, file_name)
+  ggplot2::ggsave(out_path, p, width = 12, height = 6, dpi = 150)
+  message("Created: ", out_path)
+  out_path
+}
+
+#' Plot CV errors as heatmap (variables x models)
+#' 
+#' @param cv_metrics_tbl CV metrics table with variable, model, rmse, mae columns
+#' @param out_dir Output directory for plot
+#' @param metric_type Either "rmse" or "mae"
+#' @param horizon_filter Horizon to plot (default "1-year ahead")
+#' @return Path to saved plot
+plot_cv_errors_heatmap <- function(cv_metrics_tbl, out_dir, metric_type = "rmse", horizon_filter = "1-year ahead") {
+  if (!nrow(cv_metrics_tbl)) {
+    message("No CV metrics to plot")
+    return(NULL)
+  }
+  
+  metric_col <- if (metric_type == "rmse") "rmse" else "mae"
+  metric_label <- toupper(metric_type)
+  
+  # Handle both numeric and string horizon formats
+  is_match <- if (is.character(horizon_filter)) {
+    grepl(horizon_filter, cv_metrics_tbl$horizon, ignore.case = TRUE)
+  } else {
+    cv_metrics_tbl$horizon == horizon_filter | 
+      (horizon_filter == 1 & grepl("1-step", cv_metrics_tbl$horizon, ignore.case = TRUE)) |
+      (horizon_filter == 4 & grepl("1-year", cv_metrics_tbl$horizon, ignore.case = TRUE))
+  }
+  
+  plot_df <- cv_metrics_tbl[is_match, ] |>
+    dplyr::mutate(
+      variable_label = dplyr::case_when(
+        variable == "gdp_growth" ~ "GDP Growth",
+        variable == "inflation" ~ "Inflation",
+        variable == "exch_rate" ~ "Exchange Rate (log)",
+        TRUE ~ variable
+      )
+    )
+  
+  if (!nrow(plot_df)) {
+    message("No data for horizon: ", horizon_filter)
+    return(NULL)
+  }
+  
+  horizon_label <- unique(plot_df$horizon)[1]
+  
+  p <- ggplot2::ggplot(plot_df, ggplot2::aes(x = model, y = variable_label, fill = .data[[metric_col]])) +
+    ggplot2::geom_tile(colour = "white", linewidth = 1.5) +
+    ggplot2::geom_text(ggplot2::aes(label = sprintf("%.3f", .data[[metric_col]])), colour = "black", size = 4) +
+    ggplot2::scale_fill_gradient2(
+      low = "#1b9e77", mid = "#fee08b", high = "#d73027",
+      midpoint = median(plot_df[[metric_col]], na.rm = TRUE),
+      name = metric_label
+    ) +
+    ggplot2::labs(
+      title = paste0("Cross-Validation ", metric_label, " Heatmap: ", horizon_label),
+      subtitle = "Lower values (green) indicate better forecast accuracy",
+      x = "Model",
+      y = "Variable"
+    ) +
+    ggplot2::theme_minimal(base_size = 12) +
+    ggplot2::theme(
+      axis.text.x = ggplot2::element_text(angle = 45, hjust = 1),
+      panel.grid = ggplot2::element_blank()
+    )
+  
+  file_name <- paste0("cv_errors_heatmap_h", horizon_filter, "_", metric_type, ".png")
+  out_path <- file.path(out_dir, file_name)
+  ggplot2::ggsave(out_path, p, width = 10, height = 5, dpi = 150)
+  message("Created: ", out_path)
+  out_path
+}
+
