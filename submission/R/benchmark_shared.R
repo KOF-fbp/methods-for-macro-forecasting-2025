@@ -18,6 +18,54 @@ coverage_label <- function(extra_months) {
   )
 }
 
+add_quarters <- function(yq, n = 1L) {
+  # Advance a year-quarter value by n quarters (can be negative).
+  zoo::as.yearqtr(yq) + (as.integer(n) / 4)
+}
+
+quarter_month_sequence <- function(yq, length_out = months_per_quarter) {
+  start_date <- zoo::as.Date(zoo::as.yearqtr(yq), frac = 0)
+  seq.Date(start_date, by = "1 month", length.out = length_out)
+}
+
+compute_ragged_nowcast <- function(
+    variable,
+    months_observed,
+    target_quarter,
+    latent_states_long,
+    monthly_forecast) {
+  if (months_observed <= 0L) {
+    return(NA_real_)
+  }
+
+  month_seq <- quarter_month_sequence(target_quarter, months_per_quarter)
+  observed_dates <- month_seq[seq_len(months_observed)]
+
+  observed_vals <- latent_states_long |>
+    dplyr::filter(.data$variable == !!variable, .data$date %in% observed_dates) |>
+    dplyr::arrange(.data$date) |>
+    dplyr::pull(.data$value)
+
+  if (length(observed_vals) != months_observed) {
+    return(NA_real_)
+  }
+
+  remaining <- months_per_quarter - months_observed
+  future_vals <- numeric(0)
+  if (remaining > 0L) {
+    future_dates <- month_seq[(months_observed + 1):months_per_quarter]
+    future_vals <- monthly_forecast |>
+      dplyr::filter(.data$variable == !!variable, .data$fcst_date %in% future_dates) |>
+      dplyr::arrange(.data$fcst_date) |>
+      dplyr::pull(.data$median)
+    if (length(future_vals) != remaining) {
+      return(NA_real_)
+    }
+  }
+
+  mean(c(observed_vals, future_vals))
+}
+
 add_months <- function(year_month, n) {
   stopifnot(length(year_month) == 2L)
   total_months <- as.integer(year_month[1]) * 12L + (as.integer(year_month[2]) - 1L) + as.integer(n)
@@ -84,7 +132,8 @@ forecast_mfvar <- function(
     target_vars,
     seed = 123L,
     return_model = FALSE,
-    extract_states = FALSE) {
+    extract_states = FALSE,
+    return_monthly = FALSE) {
   Y_train <- build_Y(q_train_adj, monthly_train)
 
   mod <- tryCatch(
@@ -137,7 +186,21 @@ forecast_mfvar <- function(
     )
   }
 
+  monthly_forecast <- NULL
+  if (isTRUE(return_monthly)) {
+    monthly_forecast <- tryCatch(
+      predict(mod, aggregate_fcst = FALSE, pred_bands = 0.8),
+      error = function(err) {
+        warning(sprintf("Monthly forecast extraction failed: %s", conditionMessage(err)), call. = FALSE)
+        NULL
+      }
+    )
+  }
+
   result <- list(predictions = fc, latent_states = latent_states)
+  if (!is.null(monthly_forecast)) {
+    result$monthly_forecast <- monthly_forecast
+  }
   if (return_model) result$model <- mod
   result
 }
@@ -345,7 +408,8 @@ assemble_extra_month_predictions <- function(
       target_vars,
       seed = 1000L + idx * 10L + extra_months,
       return_model = FALSE,
-      extract_states = TRUE
+      extract_states = TRUE,
+      return_monthly = TRUE
     )
   })
   mfvar_result <- mfvar_eval$result
@@ -357,6 +421,39 @@ assemble_extra_month_predictions <- function(
     ) |>
     dplyr::mutate(model = "MF-VAR")
   latent_states_fold <- mfvar_result$latent_states
+  months_observed <- max(0L, min(extra_months, months_per_quarter))
+
+  if (months_observed > 0L && !is.null(latent_states_fold) && nrow(latent_states_fold)) {
+    latent_states_long <- latent_states_fold |>
+      tidyr::pivot_longer(-date, names_to = "variable", values_to = "value") |>
+      dplyr::filter(!is.na(.data$value))
+    monthly_fcst <- mfvar_result$monthly_forecast
+    if (!is.null(monthly_fcst)) {
+      monthly_fcst <- monthly_fcst |>
+        dplyr::filter(.data$variable %in% target_vars)
+      target_quarter <- add_quarters(train_last_qtr_cv, 1L)
+      ragged_vals <- purrr::map_dbl(target_vars, function(var) {
+        compute_ragged_nowcast(
+          variable = var,
+          months_observed = months_observed,
+          target_quarter = target_quarter,
+          latent_states_long = latent_states_long,
+          monthly_forecast = monthly_fcst
+        )
+      })
+
+      step1_index <- compute_time_index(train_rows, 1L)
+      for (iter in seq_along(target_vars)) {
+        ragged_val <- ragged_vals[[iter]]
+        if (is.na(ragged_val)) next
+        var_name <- target_vars[[iter]]
+        idx_rows <- which(mfvar_pred$variable == var_name & mfvar_pred$step_ahead == 1L)
+        if (!length(idx_rows)) next
+        restored_val <- restore_series_values(ragged_val, var_name, step1_index, transforms)
+        mfvar_pred$prediction[idx_rows] <- restored_val
+      }
+    }
+  }
 
   fill_value <- if (length(x_train_full)) utils::tail(x_train_full, 1) else 0
   x_future_vec <- rep(fill_value, horizon_months)
