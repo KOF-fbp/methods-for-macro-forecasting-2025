@@ -79,14 +79,24 @@ plot_latent_states <- function(states_df, out_dir, states = NULL, mode = c("face
 
     default_name <- "mfvar_latent_states_timeseries.png"
   } else {
-    p <- ggplot2::ggplot(states_long, ggplot2::aes(x = date, y = state, fill = value)) +
+    states_heatmap <- states_long |>
+      dplyr::group_by(state) |>
+      dplyr::mutate(
+        value_mean = mean(value, na.rm = TRUE),
+        value_sd = stats::sd(value, na.rm = TRUE),
+        value = dplyr::if_else(value_sd > 0, (value - value_mean) / value_sd, value - value_mean)
+      ) |>
+      dplyr::ungroup() |>
+      dplyr::select(-value_mean, -value_sd)
+
+    p <- ggplot2::ggplot(states_heatmap, ggplot2::aes(x = date, y = state, fill = value)) +
       ggplot2::geom_tile() +
       ggplot2::scale_fill_viridis_c(option = "C") +
       ggplot2::labs(
         title = "MF-VAR latent states (heatmap)",
         x = "Date",
         y = "State",
-        fill = "Value"
+        fill = "Z-score"
       ) +
       ggplot2::theme_minimal(base_size = 12)
 

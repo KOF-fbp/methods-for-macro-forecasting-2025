@@ -213,13 +213,11 @@ fc_q <- fc |>
     ),
     # Convert exchange-rate forecasts back to levels for reporting only.
     median = dplyr::if_else(variable == "exch_rate", exp(median), median),
-    lower  = dplyr::if_else(variable == "exch_rate", exp(lower), lower),
-    upper  = dplyr::if_else(variable == "exch_rate", exp(upper), upper),
     # Calculate quarter_end from last observation quarter + step_ahead quarters
     forecast_qtr = last_obs_qtr + (step_ahead / 4),
     quarter_end = zoo::as.Date(forecast_qtr, frac = 1)
   ) |>
-  dplyr::select(-forecast_qtr)
+  dplyr::select(-forecast_qtr, -lower, -upper)
 
 if (ragged_months_observed > 0L && !is.null(latent_states) && !is.null(monthly_forecast_full)) {
   latent_states_long <- latent_states |>
@@ -258,14 +256,15 @@ if (ragged_months_observed > 0L && !is.null(latent_states) && !is.null(monthly_f
 }
 
 fc_m <- fc |>
-  dplyr::filter(!variable %in% target_vars)
+  dplyr::filter(!variable %in% target_vars) |>
+  dplyr::select(-dplyr::any_of(c("lower", "upper")))
 
 # Combine for full forecast file (quarterly limited to 4 steps, monthly unlimited)
 fc_full <- dplyr::bind_rows(fc_q, fc_m)
 
 fc_targets <- fc_q |>
   dplyr::filter(!is.na(horizon)) |>
-  dplyr::select(variable, step_ahead, horizon, quarter_end, median, lower, upper)
+  dplyr::select(variable, step_ahead, horizon, quarter_end, median)
 
 # Confirm we produced both the 1-step and 1-year forecasts for every target.
 expected_horizons <- tidyr::expand_grid(variable = target_vars, step_ahead = c(1L, 4L))
@@ -278,7 +277,7 @@ if (nrow(missing_targets)) {
 }
 
 fc_targets <- fc_targets |>
-  dplyr::select(variable, horizon, quarter_end, median, lower, upper)
+  dplyr::select(variable, horizon, quarter_end, median)
 
 readr::write_csv(fc_full,    file.path(CSV_DIR, "mfvar_forecasts_full.csv"))
 readr::write_csv(fc_targets, file.path(CSV_DIR, "mfvar_forecasts_targets.csv"))
@@ -298,27 +297,21 @@ fc_gdp <- fc_q |>
   dplyr::filter(variable == "gdp_growth") |>
   dplyr::transmute(
     time = quarter_end,
-    lower = lower,
-    median = median,
-    upper = upper
+    median = median
   )
 
 fc_infl <- fc_q |>
   dplyr::filter(variable == "inflation") |>
   dplyr::transmute(
     time = quarter_end,
-    lower = lower,
-    median = median,
-    upper = upper
+    median = median
   )
 
 fc_exch <- fc_q |>
   dplyr::filter(variable == "exch_rate") |>
   dplyr::transmute(
     time = quarter_end,
-    lower = lower,
-    median = median,
-    upper = upper
+    median = median
   )
 
 gdp_plot_path <- NULL

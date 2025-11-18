@@ -29,42 +29,4 @@
 
 
 ## Expanding Window Cross-Validation RMSE and MAE by Monthly Coverage
-| Monthly data | Model | Horizon | Observations | RMSE | MAE |
-| --- | --- | --- | --- | --- | --- |
-| Cutoff only | AR(2) | 1-step ahead | 9 | 0.4716 | 0.3596 |
-| Cutoff only | AR(2) | 1-year ahead | 9 | 1.1310 | 0.7212 |
-| Cutoff only | MF-VAR | 1-step ahead | 9 | 0.9894 | 0.6488 |
-| Cutoff only | MF-VAR | 1-year ahead | 9 | 1.3212 | 0.7822 |
-| Cutoff only | MIDAS | 1-step ahead | 9 | 0.4932 | 0.3414 |
-| Cutoff only | MIDAS | 1-year ahead | 9 | 1.0023 | 0.6272 |
-| Cutoff only | MIDAS (trend) | 1-step ahead | 9 | 0.4159 | 0.2803 |
-| Cutoff only | MIDAS (trend) | 1-year ahead | 9 | 0.7900 | 0.5382 |
-| Cutoff only | MIDAS-Latent | 1-step ahead | 9 | 1.9783 | 1.3607 |
-| Cutoff only | MIDAS-Latent | 1-year ahead | 9 | 2.3159 | 1.4919 |
-| Cutoff only | MIDAS-Latent (trend) | 1-step ahead | 9 | 1.9014 | 1.3094 |
-| Cutoff only | MIDAS-Latent (trend) | 1-year ahead | 9 | 2.2067 | 1.3750 |
-| Cutoff +1m | AR(2) | 1-step ahead | 9 | 0.4716 | 0.3596 |
-| Cutoff +1m | AR(2) | 1-year ahead | 9 | 1.1310 | 0.7212 |
-| Cutoff +1m | MF-VAR | 1-step ahead | 9 | 1.6669 | 1.1071 |
-| Cutoff +1m | MF-VAR | 1-year ahead | 9 | 1.4993 | 0.8580 |
-| Cutoff +1m | MIDAS | 1-step ahead | 9 | 0.8951 | 0.6445 |
-| Cutoff +1m | MIDAS | 1-year ahead | 9 | 1.0023 | 0.6272 |
-| Cutoff +1m | MIDAS (trend) | 1-step ahead | 9 | 0.8909 | 0.6746 |
-| Cutoff +1m | MIDAS (trend) | 1-year ahead | 9 | 0.7900 | 0.5382 |
-| Cutoff +1m | MIDAS-Latent | 1-step ahead | 9 | 1.9612 | 1.3141 |
-| Cutoff +1m | MIDAS-Latent | 1-year ahead | 9 | 2.4683 | 1.4029 |
-| Cutoff +1m | MIDAS-Latent (trend) | 1-step ahead | 9 | 1.8809 | 1.2580 |
-| Cutoff +1m | MIDAS-Latent (trend) | 1-year ahead | 9 | 2.3679 | 1.2710 |
-| Cutoff +2m | AR(2) | 1-step ahead | 9 | 0.4716 | 0.3596 |
-| Cutoff +2m | AR(2) | 1-year ahead | 9 | 1.1310 | 0.7212 |
-| Cutoff +2m | MF-VAR | 1-step ahead | 9 | 1.6054 | 1.0923 |
-| Cutoff +2m | MF-VAR | 1-year ahead | 9 | 1.0910 | 0.7013 |
-| Cutoff +2m | MIDAS | 1-step ahead | 9 | 0.9295 | 0.6349 |
-| Cutoff +2m | MIDAS | 1-year ahead | 9 | 1.0023 | 0.6272 |
-| Cutoff +2m | MIDAS (trend) | 1-step ahead | 9 | 0.9020 | 0.6659 |
-| Cutoff +2m | MIDAS (trend) | 1-year ahead | 9 | 0.7900 | 0.5382 |
-| Cutoff +2m | MIDAS-Latent | 1-step ahead | 9 | 1.8432 | 1.1157 |
-| Cutoff +2m | MIDAS-Latent | 1-year ahead | 9 | 2.4777 | 1.4359 |
-| Cutoff +2m | MIDAS-Latent (trend) | 1-step ahead | 9 | 1.7574 | 1.0658 |
-| Cutoff +2m | MIDAS-Latent (trend) | 1-year ahead | 9 | 2.3741 | 1.2677 |
-
+Cross-validation skipped (--fast/--no-cv).

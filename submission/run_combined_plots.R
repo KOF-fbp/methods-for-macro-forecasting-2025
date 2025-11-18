@@ -137,9 +137,7 @@ gdp_mfvar <- mfvar_fc |>
   dplyr::filter(variable == "gdp_growth") |>
   dplyr::transmute(
     time = quarter_end,
-    lower = lower,
-    median = median,
-    upper = upper
+    median = median
   )
 
 gdp_midas <- midas_fc |>
@@ -173,9 +171,7 @@ infl_mfvar <- mfvar_fc |>
   dplyr::filter(variable == "inflation") |>
   dplyr::transmute(
     time = quarter_end,
-    lower = lower,
-    median = median,
-    upper = upper
+    median = median
   )
 
 infl_midas <- midas_fc |>
@@ -209,9 +205,7 @@ exch_mfvar <- mfvar_fc |>
   dplyr::filter(variable == "exch_rate") |>
   dplyr::transmute(
     time = quarter_end,
-    lower = lower,
-    median = median,
-    upper = upper
+    median = median
   )
 
 exch_midas <- midas_fc |>

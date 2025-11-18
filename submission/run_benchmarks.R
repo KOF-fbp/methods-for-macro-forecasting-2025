@@ -598,12 +598,13 @@ output_time <- system.time({
         ggplot2::aes(x = quarter_end, y = display_value, colour = model),
         size = 2
       ) +
+      ggplot2::scale_x_date(labels = function(x) format(zoo::as.yearqtr(x), "%Y Q%q")) +
       ggplot2::scale_colour_manual(values = colour_map, drop = FALSE) +
       ggplot2::scale_linetype_manual(values = linetype_map, drop = FALSE) +
       ggplot2::labs(
         title = paste("Forecast comparison:", var),
         subtitle = "History (last 4 quarters) with 1-step to 1-year-ahead forecasts",
-        x = "Quarter end",
+        x = "Quarter",
         y = label_for_var(var),
         colour = NULL,
         linetype = NULL
