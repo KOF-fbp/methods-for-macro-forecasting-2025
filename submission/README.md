@@ -35,8 +35,9 @@ See [`AUTHORS.yml`](AUTHORS.yml) for contributor information.
 │
 ├── output/                     # Generated outputs (gitignored except results)
 │   ├── forecasts/             # Current forecasts from latest data
-│   │   ├── mfvar_*.csv        # MF-VAR forecasts
-│   │   ├── midas_*.csv        # MIDAS forecasts
+│   │   ├── mfvar/             # MF-VAR results (forecasts, latent states, plots)
+│   │   ├── midas/             # MIDAS results (forecasts, plots)
+│   │   ├── combined/          # Multi-model comparison plots
 │   │   ├── *.png              # Forecast visualizations
 │   │   └── *.rds              # Saved model objects
 │   └── benchmarks/            # Model comparison & evaluation
@@ -52,8 +53,9 @@ See [`AUTHORS.yml`](AUTHORS.yml) for contributor information.
 ├── renv/                       # R package management
 │
 ├── main.R                     # Entry point - unified workflow interface
-├── run_mfvar.R                # MF-VAR workflow script
+├── run_mfvar_package.R        # MF-VAR workflow script
 ├── run_midas.R                # MIDAS workflow script
+├── run_combined_plots.R       # Multi-model comparison visualization
 ├── run_benchmarks.R           # Benchmark comparison across all models
 └── README.md                  # This file
 ```
@@ -92,10 +94,12 @@ This runs the complete MF-VAR workflow:
 5. Generates forecasts and plots
 
 **Outputs:**
-- `output/forecasts/mfvar_forecasts_full.csv` - All forecast horizons
-- `output/forecasts/mfvar_forecasts_targets.csv` - 1-step and 1-year ahead only
-- `output/forecasts/mfvar_summary.txt` - Model diagnostics and evaluation
-- `output/forecasts/forecast_*.png` - Forecast visualizations
+- `output/forecasts/mfvar/csv/mfvar_forecasts_full.csv` - All forecast horizons
+- `output/forecasts/mfvar/csv/mfvar_forecasts_targets.csv` - 1-step and 1-year ahead only
+- `output/forecasts/mfvar/csv/mfvar_latent_states.csv` - Extracted latent states (extension)
+- `output/forecasts/mfvar/mfvar_summary.txt` - Model diagnostics and evaluation
+- `output/forecasts/mfvar/plots/forecast_*.png` - Forecast visualizations
+- `output/forecasts/mfvar/plots/mfvar_latent_states_*.png` - Latent state visualizations
 
 #### Option 2: MIDAS Pipeline
 
@@ -109,10 +113,10 @@ Runs MIDAS regression models with the KOF Barometer:
 3. Computes evaluation metrics
 
 **Outputs:**
-- `output/forecasts/midas_forecasts_full.csv` - All forecast horizons
-- `output/forecasts/midas_forecasts_targets.csv` - 1-step and 1-year ahead only
-- `output/forecasts/midas_summary.txt` - Model diagnostics
-- `output/forecasts/midas_evaluation.csv` - Error metrics
+- `output/forecasts/midas/csv/midas_forecasts_full.csv` - All forecast horizons
+- `output/forecasts/midas/csv/midas_forecasts_targets.csv` - 1-step and 1-year ahead only
+- `output/forecasts/midas/midas_summary.txt` - Model diagnostics
+- `output/forecasts/midas/plots/midas_forecast_*.png` - Forecast visualizations
 
 #### Option 3: Benchmark Comparison
 
@@ -120,15 +124,30 @@ Runs MIDAS regression models with the KOF Barometer:
 Rscript main.R benchmarks
 ```
 
-Compares all models (MF-VAR, MIDAS, AR(2), RW-trend) with:
-- Holdout evaluation
-- Expanding window cross-validation (28 folds)
-- Multiple monthly data coverage scenarios
+Compares all models (MF-VAR, MIDAS-KOF, MIDAS-Latent, AR(2), RW-trend) with:
+- Holdout evaluation (last 4 quarters)
+- Expanding window cross-validation (up to 20 folds, configurable via `--max-folds`)
+- CV coverage: 1993 Q4 to 2025 Q2 (training starts from 6 quarters in 1992 Q2-1993 Q3)
+- Per-fold timing breakdowns for performance profiling
 
 **Outputs:**
-- `output/benchmarks/model_benchmark_*.csv` - Detailed metrics
+- `output/benchmarks/csv/model_benchmark_*.csv` - Detailed metrics
 - `output/benchmarks/model_benchmark_summary.md` - Summary tables
-- `output/benchmarks/model_benchmark_plot_*.png` - Comparison plots
+- `output/benchmarks/plots/model_benchmark_plot_*.png` - Comparison plots
+
+#### Option 4: Combined Forecast Plots
+
+```bash
+Rscript run_combined_plots.R
+```
+
+Generates multi-model comparison visualizations:
+- Overlays all 6 forecast series (MF-VAR, MIDAS-KOF trend/simple, MIDAS-Latent trend/simple, AR(2))
+- Shows 1-year (4 quarters) of historical context
+- Requires prior runs of `run_mfvar_package.R` and `run_midas.R`
+
+**Outputs:**
+- `output/forecasts/combined/plots/combined_forecast_*.png` - Multi-model comparison plots
 
 ## Target Variables
 
@@ -146,7 +165,8 @@ Compares all models (MF-VAR, MIDAS, AR(2), RW-trend) with:
 ### MF-VAR
 - **Lags**: 5 quarters
 - **Prior**: Minnesota with inverse-Wishart covariance
-- **MCMC**: 4000 draws, 2000 burn-in, thinning=4
+- **MCMC**: 10000 draws, 5000 burn-in, no thinning (package defaults)
+- **Monthly indicators**: CPI, FX turnover, unemployment, SNB rate, SMI returns
 - **Aggregation**: Average (for monthly-to-quarterly mapping)
 
 ### Benchmarks
@@ -161,7 +181,10 @@ Quarterly data sourced from Swiss National Bank (SNB):
 - Consumer Price Index (CPI)
 - Exchange rates (CHF/EUR)
 
-Monthly KOF Economic Barometer fetched via `kofdata` package.
+Monthly indicators:
+- KOF Economic Barometer (via `kofdata` package) for MIDAS models
+- SNB series: CPI, FX turnover, unemployment, policy rate
+- Swiss Market Index (SMI) monthly returns for MF-VAR models
 
 See `data/data_sources.md` for detailed provenance.
 
@@ -250,7 +273,7 @@ This project uses `renv` for package management to ensure reproducibility across
 
 ## Results
 
-Pre-computed results are included in `output/forecasts/` and `output/benchmarks/` directories, allowing inspection without re-running the models (which can take 5-10 minutes).
+Pre-computed results are included in `output/forecasts/` and `output/benchmarks/` directories, allowing inspection without re-running the models (which can take 20-30 minutes per workflow with package default hyperparameters).
 
 ## Troubleshooting
 
