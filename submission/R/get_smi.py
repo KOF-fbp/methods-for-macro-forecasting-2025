@@ -33,5 +33,7 @@ smi_df = smi_monthly_avg.reset_index(drop=True)
 # print(smi_df.tail())
 
 # write to csv
-output_path = "/Users/minna/Code/Macro_Forecasting/group_project/methods-for-macro-forecasting-2025/submission/data/full_smi.csv"
+output_path = "/Users/minna/Code/Macro_Forecasting/group_project/methods-for-macro-forecasting-2025/submission/data/raw_data/full_smi.csv"
 smi_df.to_csv(output_path, index=False)
+
+print("done!")

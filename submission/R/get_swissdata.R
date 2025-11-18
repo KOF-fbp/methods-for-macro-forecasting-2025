@@ -38,18 +38,8 @@ snboffzisa_meta <- read_yaml("ch.snb.snboffzisa/ch.snb.snboffzisa.yaml")
 #                       Clean Data
 # ------------------------------------------------------
 
-# --------------- swiss and european zins rate -> good predictor for swiss zinsraten
-# snboffzisa_ug <- snboffzisa |> filter(overview == "UG") # swiss policy rate UG 
-
-
-# Import SRF from the raw SNB CSV file in the data folder
-# snboffzisa_raw_path <- "/Users/minna/Code/Macro_Forecasting/group_project/methods-for-macro-forecasting-2025/submission/data/Interest_rates_snb-data-snboffzisa-en-all-20251021-0900.csv"
-# snboffzisa_raw <- read.csv(snboffzisa_raw_path, sep = ";", skip = 3, header = TRUE, stringsAsFactors = FALSE)
-
-
-
-
 # ---------------- Filter for SRF (EU marginal lending facility) and clean empty values
+# TODO: redo this!!!!
 snboffzisa_eu <- snboffzisa |> 
   filter(overview == "srf") |>
   mutate(date = as.Date(date)) |>
@@ -87,8 +77,9 @@ tail(plkopr_fin)
 
 # source full_smi.py which fetches monthly smi data -> from 1990 till today. quantmod (used in smi.R) only has from 2007 until 2025.
 setwd("/Users/minna/Code/Macro_Forecasting/group_project/methods-for-macro-forecasting-2025/submission/data/")
+print(getwd())
 # source("smi.R")
-smi <- read.csv("full_smi.csv") |>
+smi <- read.csv("raw_data/full_smi.csv") |>
    mutate(date = as.Date(date)) 
   
 # str(smi)
@@ -102,5 +93,5 @@ combined_df <- reduce(series_list, full_join, by = "date") |>
 tail(combined_df, n=10)
 
 View(combined_df)
-write.csv(combined_df, "combined_timeseries.csv")
+write.csv(combined_df, "processed/combined_timeseries.csv")
 
