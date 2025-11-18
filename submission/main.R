@@ -669,7 +669,9 @@ combined_plot
 
 
 # daframe with h=4 forecasts
+#add dates to df_fc
 df_h4_forecast <- data.frame(
+  date = date_all[(nrow(df_fc) + 1):(nrow(df_fc) + 4)],
   gdp = pred_q50[(nrow(df_fc) + 1):(nrow(df_fc) + 4), "gdp"],
   inflation = pred_q50[(nrow(df_fc) + 1):(nrow(df_fc) + 4), "inflation"],
   wkfreuro = pred_q50[(nrow(df_fc) + 1):(nrow(df_fc) + 4), "wkfreuro"]
