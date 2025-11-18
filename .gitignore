@@ -1,3 +1,4 @@
+.DS_Store
 # History files
 .Rhistory
 .Rapp.history
@@ -47,7 +48,14 @@ po/*~
 
 # RStudio Connect folder
 rsconnect/
+.DS_Store
+**/.DS_Store
+.DS_Store
+**/.DS_Store
 
+# Quarto outputs in submission/src: ignore generated HTML alongside .qmd
+submission/src/**/*.html
+submission/src/**/*_files/
 # Ignore markdown files created for documentation
 MFVAR_README.md
 IMPLEMENTATION_SUMMARY.md

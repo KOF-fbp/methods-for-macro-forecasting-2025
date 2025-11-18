@@ -1,0 +1,211 @@
+title: "MF-VAR Pipeline Walkthrough"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+  ipynb: default
+execute:
+  eval: true
+  echo: true
+  message: false
+  warning: false
+freeze: auto
+---
+
+# Orientation
+
+This Quarto notebook explains how the mixed-frequency Bayesian VAR (MF-VAR) project is wired together. It distils the main scripts under `R/`, clarifies the underlying econometric model, and gives runnable scaffolding to experiment with the workflow in `Draft_MFVAR.r`.
+
+-   Quarterly targets: Swiss GDP growth, CPI inflation, EUR/CHF exchange rate (`R/setup.R`).
+-   Monthly indicator: KOF Barometer fetched via `kofdata::get_time_series()` (`R/data_processing.R`).
+-   Core engine: `mfbvar::estimate_mfbvar()` with a Minnesota prior and inverse-Wishart covariance.
+-   Benchmarks: an AR(2) fallback estimated three different ways (`predict_ar2`).
+
+> Set `execute.eval` to `true` in the YAML header when you want to run the chunks; it is disabled by default so you can read without triggering the full pipeline.
+
+# Environment Setup
+
+The helper in `R/setup.R` keeps package versions consistent through `renv`.
+
+```{r}
+find_project_root <- function() {
+  current <- normalizePath(".", winslash = "/", mustWork = TRUE)
+  repeat {
+    if (file.exists(file.path(current, "Draft_MFVAR.r"))) return(current)
+    parent <- dirname(current)
+    if (identical(parent, current)) stop("Could not locate project root from mfvar_walkthrough.qmd.")
+    current <- parent
+  }
+}
+
+proj_root <- find_project_root()
+setwd(proj_root)
+
+source(file.path(proj_root, "R", "setup.R"))
+source(file.path(proj_root, "R", "data_processing.R"))
+source(file.path(proj_root, "R", "evaluation.R"))
+source(file.path(proj_root, "R", "plotting.R"))
+
+# Activate renv explicitly so chunks inherit the locked package versions.
+source(file.path(proj_root, "renv", "activate.R"), local = TRUE)
+load_required_packages(required_pkgs)
+
+# Use lighter MF-VAR sampling settings when rendering the walkthrough so
+# chunks finish quickly while still illustrating the full workflow.
+options(
+  mfvar.n_reps = 800L,
+  mfvar.n_burnin = 400L,
+  mfvar.n_thin = 2L
+)
+```
+
+If any package is missing, run `renv::restore()` from the project root. The `required_pkgs` vector contains the tidyverse stack plus `mfbvar` and `kofdata`.
+
+# Data Layer
+
+## Quarterly Inputs
+
+`read_quarterly_data()` loads `data/data_quarterly.csv`, verifies the expected columns, computes annualised growth rates, and returns a tibble of quarterly observations.
+
+```{r}
+library(dplyr)
+library(readr)
+qdat_raw <- read_quarterly_data(file.path(proj_root, "data"))
+print(head(qdat_raw, 4))
+```
+
+Key steps: - Convert `%Y-%m` strings into `zoo::yearqtr` stamps. - Log-difference GDP and CPI, multiply by 400 for annualised rates. - Log EUR/CHF so the VAR works in stationary space.
+
+## KOF Barometer
+
+`fetch_kof_barometer()` tries two KOF API identifiers and centres the series. The result is a monthly `ts` object, which feeds the mixed-frequency prior. When working offline, plumb a cached `ts` into the function stub.
+
+```{r}
+baro_ts <- fetch_kof_barometer()
+start(baro_ts); end(baro_ts); frequency(baro_ts)
+```
+
+## Aligning Frequencies
+
+Two helpers keep the quarterly and monthly blocks consistent:
+
+-   `trim_to_overlap()` truncates quarters beyond the available barometer history.
+-   `window_baro()` extends the barometer window two months before the sample start so ragged-edge aggregation works.
+
+```{r}
+trimmed <- trim_to_overlap(qdat_raw, baro_ts)
+qdat <- trimmed$qdat
+baro_aligned <- window_baro(trimmed$baro_ts, qdat)
+str(baro_aligned)
+```
+
+Finally, `build_Y()` arranges the inputs for `mfbvar::set_prior()`.
+
+```{r}
+Y <- build_Y(qdat, baro_aligned)
+str(Y)
+```
+
+# Model Primer
+
+## Mixed-Frequency VAR Structure
+
+The MF-VAR combines quarterly targets `y_t` with the monthly KOF barometer `x_{m}` in a state-space system:
+
+-   **Observation equation**: Quarterly aggregates are constructed from monthly latent states using an averaging matrix (parameter `aggregation = "average"`).
+-   **State equation**: Latent monthly variables follow a VAR with `n_lags = 5` by default. The transition block includes the KOF barometer and each quarterly target.
+
+This design lets monthly information update quarterly forecasts without waiting for full quarterly releases.
+
+## Prior Specification
+
+`estimate_mfvar_model()` wraps two critical calls:
+
+1.  `mfbvar::set_prior()` builds the Minnesota prior (tightens own lags, shrinks cross-variable effects) and draws `n_reps = 4000` posterior samples after `n_burnin = 2000`, thinning every fourth draw.
+2.  `mfbvar::estimate_mfbvar()` estimates the reduced-form VAR and the accompanying state-space parameters under an inverse-Wishart covariance prior (`variance = "iw"`).
+
+Lag length and forecast horizon are configurable but jointly affect evaluation windows because the pipeline holds out the last quarters for testing.
+
+# Forecast Workflow
+
+The main script `Draft_MFVAR.r` orchestrates the end-to-end run:
+
+1.  **Load helpers** (`R/setup.R`, `R/data_processing.R`, `R/evaluation.R`, `R/plotting.R`).
+2.  **Prepare data**: read quarterly CSV, download barometer, align with `trim_to_overlap()` and `window_baro()`, then build `Y`.
+3.  **Evaluation suites**: call `run_holdout_evaluation()` and `run_cross_validation()` to benchmark MF-VAR versus AR(2).
+4.  **Model fit**: `estimate_mfvar_model(Y, n_lags = 5, n_fcst = 12)`.
+5.  **Forecast tidying**: keep target variables, compute horizon labels, back-transform exchange-rate levels for presentation.
+6.  **Persistence**: write CSVs, summary text, plots, and the fitted model RDS.
+
+The snippet below mirrors the estimation block without touching disk.
+
+```{r}
+mod_ss <- estimate_mfvar_model(Y, n_lags = 5, n_fcst = 12, seed = 123)
+fc <- predict(mod_ss, aggregate_fcst = TRUE, pred_bands = 0.8)
+head(dplyr::select(fc, variable, time, median))
+```
+
+# Benchmarks and Diagnostics
+
+## AR(2) Fallback
+
+`predict_ar2()` cycles through three estimators (Yule-Walker, OLS, ARIMA). The function catches warnings and retries before giving up with `NA` forecasts. This protects the evaluation tables when the simple benchmark struggles with short samples.
+
+```{r}
+ar2_gdp <- predict_ar2(qdat$gdp_growth, n_ahead = 4, var_label = "gdp_growth", context = "demo")
+ar2_gdp
+```
+
+## Holdout Evaluation
+
+The holdout split reserves up to four quarters after accounting for lag burn-in. For each target:
+
+-   Fit MF-VAR on the training slice and forecast the holdout quarters.
+-   Fit AR(2) on the same training slice.
+-   Compute RMSE and MAE using `safe_rmse()` and `safe_mae()`.
+
+```{r}
+holdout <- run_holdout_evaluation(qdat, baro_aligned, n_lags = 5, target_vars = target_variables, out_dir = tempdir())
+holdout$table
+```
+
+## Expanding Window Cross-Validation
+
+Cross-validation iterates over the last quarters using an expanding window approach (training always starts from the beginning and expands). The model is re-estimated each time, forecasting one step ahead. The loop saves fold-level predictions for further diagnostics.
+
+```{r}
+```
+
+## Expanding Window Cross-Validation
+
+Cross-validation iterates over the last `min(8, nrow(qdat) - (n_lags + 2))` quarters, re-estimating the model each time and forecasting one step ahead. The training window starts from the beginning and expands to include more observations with each fold.
+
+```{r}
+cv <- run_cross_validation(qdat, baro_aligned, n_lags = 5, target_vars = target_variables, out_dir = tempdir())
+cv$table
+```
+
+# Visual Outputs
+
+Plotting helpers in `R/plotting.R` take tidy data frames with `lower`, `median`, and `upper` columns.
+
+-   `plot_target_forecasts()` compares MF-VAR intervals against AR(2) point forecasts.
+-   `plot_target_forecasts_with_history()` anchors the first forecast to the last observation when needed so lines join smoothly.
+
+The production script writes PNG files such as `output/forecast_gdp_growth.png` and `output/forecast_gdp_growth_context.png`.
+
+# Reproducing the Full Run
+
+End-to-end execution from the project root:
+
+```{bash eval=FALSE}
+Rscript Draft_MFVAR.r
+```
+
+Outputs include: - `output/mfvar_summary.txt` with posterior diagnostics and evaluation tables. - `output/mfvar_forecasts_full.csv` and `output/mfvar_forecasts_targets.csv`. - `output/mfvar_model_ss.rds` for re-use in downstream analysis. - Optional forecast charts saved as PNGs when forecasts exist for a target.
+
+# Extending the Pipeline
+
+Ideas for customisation: - Add new quarterly targets by editing `target_variables` in `R/setup.R` and ensuring the quarterly CSV exposes the matching columns. - Adjust `n_lags` and `n_fcst` jointly; remember longer lags shrink the available evaluation windows. - Swap priors by changing the `prior` or `variance` arguments inside `estimate_mfvar_model()`, keeping an eye on convergence diagnostics in the summary output. - Use the cross-validation fold store (`output/forecast_cross_validation_folds.csv`) to study time-varying performance or to calibrate alternative benchmarks.
+
+For further theoretical grounding, see the course slides in `for_our_reference/State-Space_Models_(slides_day_2).pdf`, which cover state-space representations and filtering fundamentals.
