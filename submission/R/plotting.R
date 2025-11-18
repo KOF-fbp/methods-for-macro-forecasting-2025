@@ -491,6 +491,10 @@ plot_cv_errors_by_variable <- function(cv_metrics_tbl, out_dir, metric_type = "r
     return(NULL)
   }
   
+  # Calculate number of folds from observations count
+  n_folds <- unique(plot_df$observations)[1]
+  if (is.na(n_folds) || n_folds == 0) n_folds <- "unknown"
+  
   p <- ggplot2::ggplot(plot_df, ggplot2::aes(x = model, y = .data[[metric_col]], fill = model)) +
     ggplot2::geom_col(position = "dodge", width = 0.7) +
     ggplot2::facet_grid(horizon_label ~ variable_label, scales = "free_y", space = "free_x") +
@@ -498,7 +502,7 @@ plot_cv_errors_by_variable <- function(cv_metrics_tbl, out_dir, metric_type = "r
     ggplot2::scale_y_continuous(labels = scales::number_format(accuracy = 0.001)) +
     ggplot2::labs(
       title = paste0("Cross-Validation ", metric_label, " by Variable and Model"),
-      subtitle = "Expanding window CV with 2 folds (Note: independent y-axis scales per variable)",
+      subtitle = sprintf("Expanding window CV with %s folds (Note: independent y-axis scales per variable)", n_folds),
       x = "Model",
       y = metric_label
     ) +
