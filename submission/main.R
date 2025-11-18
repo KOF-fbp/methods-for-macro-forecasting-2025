@@ -618,7 +618,7 @@ for (var in selected_variables) {
   start_slice <- max(1, forecast_start - 4)
   df_actual <- data.frame(date = df_fc$date, actual = df_fc[[var]]) |>
     dplyr::slice(start_slice:dplyr::n())
-
+  
   keep <- (forecast_start - 1):n_obs
   df_forecast <- data.frame(
     date      = date_all[keep],
@@ -628,9 +628,7 @@ for (var in selected_variables) {
     lower2    = pred_q025[keep, var],
     upper2    = pred_q975[keep, var]
   )
-
-
-
+  
   df_forecast[1, c("predicted","lower1","upper1","lower2","upper2")] <- df_fc[[var]][forecast_start - 1]
   
   plot <- ggplot() +
@@ -665,8 +663,9 @@ for (var in selected_variables) {
 }
 
 combined_plot <- patchwork::wrap_plots(plots, ncol = 1)
-combined_plot
-
+#save plot
+ggsave(paste0(output_folder, "/bvar_current_forecast_combined.png"),
+       combined_plot, width = 8, height = 10)
 
 # daframe with h=4 forecasts
 #add dates to df_fc
