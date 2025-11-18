@@ -17,10 +17,11 @@ if (!interactive()) {
 
 source(file.path("R", "setup.R"))
 source(file.path("R", "data_processing.R"))
+source(file.path("R", "benchmark_shared.R"))
 source(file.path("R", "plotting.R"))
 
 activate_project()
-load_required_packages(required_pkgs)
+load_required_packages(c(required_pkgs, "midasr"))
 
 start_time <- Sys.time()
 
@@ -61,6 +62,8 @@ stationary <- stationarise_quarterly(trimmed$qdat)
 qdat_orig <- trimmed$qdat
 qdat_adj <- stationary$data
 transforms <- stationary$transforms
+y_ts_list <- build_q_ts(qdat_orig)
+train_rows <- nrow(qdat_adj)
 
 # Calculate proper quarter_end for MF-VAR forecasts based on last observation
 last_obs_qtr <- tail(qdat_orig$qtr, 1)
@@ -127,6 +130,75 @@ for (var in target_vars) {
   ar2_forecasts[[var]] <- ar2_tbl
 }
 
+# --- MIDAS-Latent overlays --------------------------------------------------
+message("Estimating MIDAS-Latent overlays...")
+
+latent_states_path <- file.path(MFVAR_DIR, "csv", "mfvar_latent_states.csv")
+if (!file.exists(latent_states_path)) {
+  stop("MF-VAR latent states not found. Run: Rscript run_mfvar_package.R")
+}
+
+latent_states_raw <- readr::read_csv(latent_states_path, show_col_types = FALSE) |>
+  dplyr::mutate(date = as.Date(.data$date))
+
+required_dates <- do.call(c, lapply(qdat_orig$qtr, quarter_month_sequence))
+match_idx <- match(required_dates, latent_states_raw$date)
+if (any(is.na(match_idx))) {
+  missing_dates <- unique(required_dates[is.na(match_idx)])
+  example_dates <- paste(head(missing_dates, 3), collapse = ", ")
+  stop(
+    sprintf(
+      "Latent states file is missing %d required months (examples: %s). Re-run run_mfvar_package.R to refresh latent states.",
+      length(missing_dates),
+      example_dates
+    )
+  )
+}
+
+latent_states_df <- latent_states_raw[match_idx, ] |>
+  dplyr::select(dplyr::all_of(target_vars))
+
+latent_overlays <- lapply(target_vars, function(var) {
+  fc_trend <- forecast_midas_latent(
+    y_series = y_ts_list[[var]],
+    train_rows = train_rows,
+    latent_states_df = latent_states_df,
+    variable_name = var,
+    horizon = max_horizon,
+    include_trend = TRUE
+  )
+
+  fc_simple <- forecast_midas_latent(
+    y_series = y_ts_list[[var]],
+    train_rows = train_rows,
+    latent_states_df = latent_states_df,
+    variable_name = var,
+    horizon = max_horizon,
+    include_trend = FALSE
+  )
+
+  var_quarters <- mfvar_quarterly |>
+    dplyr::filter(.data$variable == !!var) |>
+    dplyr::pull(.data$quarter_end)
+
+  latent_tbl <- tibble::tibble(
+    time = var_quarters,
+    midas_latent_trend = fc_trend,
+    midas_latent_simple = fc_simple
+  )
+
+  if (identical(var, "exch_rate")) {
+    latent_tbl <- latent_tbl |>
+      dplyr::mutate(
+        midas_latent_trend = exp(.data$midas_latent_trend),
+        midas_latent_simple = exp(.data$midas_latent_simple)
+      )
+  }
+
+  latent_tbl
+})
+names(latent_overlays) <- target_vars
+
 # --- Create combined plots ---------------------------------------------------
 message("Creating combined forecast plots...")
 
@@ -159,6 +231,7 @@ if (nrow(gdp_mfvar) > 0 && nrow(gdp_midas) > 0) {
     midas_df = gdp_midas,
     ar_df = ar2_forecasts$gdp_growth,
     history_df = gdp_history,
+    latent_df = latent_overlays$gdp_growth,
     out_dir = OUT_DIR,
     title = "GDP growth: all model forecasts",
     y_label = "Annualised percentage",
@@ -193,6 +266,7 @@ if (nrow(infl_mfvar) > 0 && nrow(infl_midas) > 0) {
     midas_df = infl_midas,
     ar_df = ar2_forecasts$inflation,
     history_df = infl_history,
+    latent_df = latent_overlays$inflation,
     out_dir = OUT_DIR,
     title = "Inflation: all model forecasts",
     y_label = "Annualised percentage",
@@ -227,6 +301,7 @@ if (nrow(exch_mfvar) > 0 && nrow(exch_midas) > 0) {
     midas_df = exch_midas,
     ar_df = ar2_forecasts$exch_rate,
     history_df = exch_history,
+    latent_df = latent_overlays$exch_rate,
     out_dir = OUT_DIR,
     title = "Exchange rate: all model forecasts",
     y_label = "CHF per EUR",

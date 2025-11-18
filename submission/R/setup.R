@@ -68,7 +68,6 @@ default_monthly_indicators <- c(
   "devkum",
   "amarbma",
   "snboffzisa",
-  "smi_monthly_avg",
   "smi_monthly_return"
 )
 
