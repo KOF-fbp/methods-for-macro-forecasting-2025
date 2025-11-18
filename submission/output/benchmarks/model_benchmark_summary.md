@@ -31,40 +31,40 @@
 ## Expanding Window Cross-Validation RMSE and MAE by Monthly Coverage
 | Monthly data | Model | Horizon | Observations | RMSE | MAE |
 | --- | --- | --- | --- | --- | --- |
-| Cutoff only | AR(2) | 1-step ahead | 84 | 5.2488 | 1.8924 |
-| Cutoff only | AR(2) | 1-year ahead | 84 | 4.7140 | 1.7552 |
-| Cutoff only | MF-VAR | 1-step ahead | 84 | 7.3391 | 2.4448 |
-| Cutoff only | MF-VAR | 1-year ahead | 84 | 5.5777 | 2.1416 |
-| Cutoff only | MIDAS | 1-step ahead | 84 | 4.0269 | 1.7306 |
-| Cutoff only | MIDAS | 1-year ahead | 84 | 4.8827 | 1.8197 |
-| Cutoff only | MIDAS (trend) | 1-step ahead | 84 | 4.1133 | 1.7620 |
-| Cutoff only | MIDAS (trend) | 1-year ahead | 84 | 4.9172 | 1.8640 |
-| Cutoff only | MIDAS-Latent | 1-step ahead | 84 | 7.2988 | 2.8535 |
-| Cutoff only | MIDAS-Latent | 1-year ahead | 84 | 7.3177 | 3.1245 |
-| Cutoff only | MIDAS-Latent (trend) | 1-step ahead | 84 | 7.3013 | 2.8483 |
-| Cutoff only | MIDAS-Latent (trend) | 1-year ahead | 84 | 7.3250 | 3.0969 |
-| Cutoff +1m | AR(2) | 1-step ahead | 84 | 5.2488 | 1.8924 |
-| Cutoff +1m | AR(2) | 1-year ahead | 84 | 4.7140 | 1.7552 |
-| Cutoff +1m | MF-VAR | 1-step ahead | 84 | 7.3391 | 2.4448 |
-| Cutoff +1m | MF-VAR | 1-year ahead | 84 | 5.6504 | 2.2001 |
-| Cutoff +1m | MIDAS | 1-step ahead | 84 | 4.1542 | 1.5061 |
-| Cutoff +1m | MIDAS | 1-year ahead | 84 | 4.8827 | 1.8197 |
-| Cutoff +1m | MIDAS (trend) | 1-step ahead | 84 | 4.2593 | 1.6076 |
-| Cutoff +1m | MIDAS (trend) | 1-year ahead | 84 | 4.9172 | 1.8640 |
-| Cutoff +1m | MIDAS-Latent | 1-step ahead | 84 | 7.3875 | 2.9828 |
-| Cutoff +1m | MIDAS-Latent | 1-year ahead | 84 | 7.2528 | 3.1307 |
-| Cutoff +1m | MIDAS-Latent (trend) | 1-step ahead | 84 | 7.4055 | 2.9918 |
-| Cutoff +1m | MIDAS-Latent (trend) | 1-year ahead | 84 | 7.2693 | 3.1291 |
-| Cutoff +2m | AR(2) | 1-step ahead | 84 | 5.2488 | 1.8924 |
-| Cutoff +2m | AR(2) | 1-year ahead | 84 | 4.7140 | 1.7552 |
-| Cutoff +2m | MF-VAR | 1-step ahead | 84 | 7.3391 | 2.4448 |
-| Cutoff +2m | MF-VAR | 1-year ahead | 84 | 5.5994 | 2.2445 |
-| Cutoff +2m | MIDAS | 1-step ahead | 84 | 4.7847 | 1.6287 |
-| Cutoff +2m | MIDAS | 1-year ahead | 84 | 4.8827 | 1.8197 |
-| Cutoff +2m | MIDAS (trend) | 1-step ahead | 84 | 4.8236 | 1.7035 |
-| Cutoff +2m | MIDAS (trend) | 1-year ahead | 84 | 4.9172 | 1.8640 |
-| Cutoff +2m | MIDAS-Latent | 1-step ahead | 84 | 7.3570 | 3.0508 |
-| Cutoff +2m | MIDAS-Latent | 1-year ahead | 84 | 7.2546 | 3.1965 |
-| Cutoff +2m | MIDAS-Latent (trend) | 1-step ahead | 84 | 7.3648 | 3.0469 |
-| Cutoff +2m | MIDAS-Latent (trend) | 1-year ahead | 84 | 7.2530 | 3.1804 |
+| Cutoff only | AR(2) | 1-step ahead | 9 | 0.4716 | 0.3596 |
+| Cutoff only | AR(2) | 1-year ahead | 9 | 1.1310 | 0.7212 |
+| Cutoff only | MF-VAR | 1-step ahead | 9 | 0.9894 | 0.6488 |
+| Cutoff only | MF-VAR | 1-year ahead | 9 | 1.3212 | 0.7822 |
+| Cutoff only | MIDAS | 1-step ahead | 9 | 0.4932 | 0.3414 |
+| Cutoff only | MIDAS | 1-year ahead | 9 | 1.0023 | 0.6272 |
+| Cutoff only | MIDAS (trend) | 1-step ahead | 9 | 0.4159 | 0.2803 |
+| Cutoff only | MIDAS (trend) | 1-year ahead | 9 | 0.7900 | 0.5382 |
+| Cutoff only | MIDAS-Latent | 1-step ahead | 9 | 1.9783 | 1.3607 |
+| Cutoff only | MIDAS-Latent | 1-year ahead | 9 | 2.3159 | 1.4919 |
+| Cutoff only | MIDAS-Latent (trend) | 1-step ahead | 9 | 1.9014 | 1.3094 |
+| Cutoff only | MIDAS-Latent (trend) | 1-year ahead | 9 | 2.2067 | 1.3750 |
+| Cutoff +1m | AR(2) | 1-step ahead | 9 | 0.4716 | 0.3596 |
+| Cutoff +1m | AR(2) | 1-year ahead | 9 | 1.1310 | 0.7212 |
+| Cutoff +1m | MF-VAR | 1-step ahead | 9 | 0.9894 | 0.6488 |
+| Cutoff +1m | MF-VAR | 1-year ahead | 9 | 1.4993 | 0.8580 |
+| Cutoff +1m | MIDAS | 1-step ahead | 9 | 0.8951 | 0.6445 |
+| Cutoff +1m | MIDAS | 1-year ahead | 9 | 1.0023 | 0.6272 |
+| Cutoff +1m | MIDAS (trend) | 1-step ahead | 9 | 0.8909 | 0.6746 |
+| Cutoff +1m | MIDAS (trend) | 1-year ahead | 9 | 0.7900 | 0.5382 |
+| Cutoff +1m | MIDAS-Latent | 1-step ahead | 9 | 1.9612 | 1.3141 |
+| Cutoff +1m | MIDAS-Latent | 1-year ahead | 9 | 2.4683 | 1.4029 |
+| Cutoff +1m | MIDAS-Latent (trend) | 1-step ahead | 9 | 1.8809 | 1.2580 |
+| Cutoff +1m | MIDAS-Latent (trend) | 1-year ahead | 9 | 2.3679 | 1.2710 |
+| Cutoff +2m | AR(2) | 1-step ahead | 9 | 0.4716 | 0.3596 |
+| Cutoff +2m | AR(2) | 1-year ahead | 9 | 1.1310 | 0.7212 |
+| Cutoff +2m | MF-VAR | 1-step ahead | 9 | 0.9894 | 0.6488 |
+| Cutoff +2m | MF-VAR | 1-year ahead | 9 | 1.0910 | 0.7013 |
+| Cutoff +2m | MIDAS | 1-step ahead | 9 | 0.9295 | 0.6349 |
+| Cutoff +2m | MIDAS | 1-year ahead | 9 | 1.0023 | 0.6272 |
+| Cutoff +2m | MIDAS (trend) | 1-step ahead | 9 | 0.9020 | 0.6659 |
+| Cutoff +2m | MIDAS (trend) | 1-year ahead | 9 | 0.7900 | 0.5382 |
+| Cutoff +2m | MIDAS-Latent | 1-step ahead | 9 | 1.8432 | 1.1157 |
+| Cutoff +2m | MIDAS-Latent | 1-year ahead | 9 | 2.4777 | 1.4359 |
+| Cutoff +2m | MIDAS-Latent (trend) | 1-step ahead | 9 | 1.7574 | 1.0658 |
+| Cutoff +2m | MIDAS-Latent (trend) | 1-year ahead | 9 | 2.3741 | 1.2677 |
 

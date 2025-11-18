@@ -137,7 +137,12 @@ trimmed <- trim_to_overlap(
   start_strategy = early_strategy
 )
 qdat_orig <- trimmed$qdat
-monthly_series_list <- window_monthly_series(trimmed$monthly, qdat_orig, end_mode = "available")
+
+# For holdout evaluation, extend monthly series to available data
+monthly_series_list_holdout <- window_monthly_series(trimmed$monthly, qdat_orig, end_mode = "available")
+
+# For CV, keep the base monthly series without extending to available (let each fold control its own window)
+monthly_series_list <- trimmed$monthly
 
 # Also prepare KOF Barometer for MIDAS-KOF models
 baro_ts <- window_baro(baro_raw, qdat_orig, end_mode = "available")
@@ -208,7 +213,7 @@ if (length(x_future_full) != eval_horizon * months_per_quarter) {
 # Calculate the end month for training data
 train_last_qtr_mfvar <- q_train_orig$qtr[nrow(q_train_orig)]
 train_last_month_mfvar <- quarter_to_month_end(train_last_qtr_mfvar)
-monthly_train_holdout <- lapply(monthly_series_list, function(ts_obj) {
+monthly_train_holdout <- lapply(monthly_series_list_holdout, function(ts_obj) {
   stats::window(ts_obj, end = train_last_month_mfvar)
 })
 
