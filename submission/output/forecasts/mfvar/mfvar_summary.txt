@@ -2,14 +2,14 @@
 ==== MF-VAR summary (Minnesota prior, IW covariance) ====
 
 Mixed-frequency BVAR with:
-7 variables (plkopr, devkum, amarbma, snboffzisa, gdp_growth, inflation, exch_rate)
+8 variables (plkopr, devkum, amarbma, snboffzisa, smi_monthly_return, gdp_growth, inflation, exch_rate)
 Prior: minn
 
 Error covariance matrix: Inverse Wishart
 5 lags
 406 time periods (1992-02-01 - 2025-11-01)
 12 periods forecast
-4000 draws used in main chain
+10000 draws used in main chain
 NULL
 
 ==== Note ====

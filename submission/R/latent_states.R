@@ -115,3 +115,97 @@ plot_latent_states <- function(states_df, out_dir, states = NULL, mode = c("face
   ggplot2::ggsave(plot_path, plot = p, width = 8, height = if (identical(mode, "facet")) 6 else 4.5, dpi = 150)
   plot_path
 }
+
+plot_latent_states_with_actuals <- function(states_df, qdat_orig, out_dir, 
+                                             target_variables = c("gdp_growth", "inflation", "exch_rate"),
+                                             filename = NULL) {
+  if (!"date" %in% names(states_df)) {
+    stop("states_df must contain a 'date' column for plotting.")
+  }
+  
+  required_cols <- c("qtr", target_variables)
+  missing_cols <- setdiff(required_cols, names(qdat_orig))
+  if (length(missing_cols)) {
+    stop("qdat_orig missing required columns: ", paste(missing_cols, collapse = ", "))
+  }
+  
+  # Convert quarterly data to dates (use quarter end dates for alignment)
+  qdat_for_plot <- qdat_orig |>
+    dplyr::mutate(date = as.Date(zoo::as.yearqtr(.data$qtr))) |>
+    dplyr::select(date, tidyselect::all_of(target_variables))
+  
+  # Prepare latent states (select only quarterly target variables)
+  available_states <- intersect(target_variables, setdiff(names(states_df), "date"))
+  if (length(available_states) == 0) {
+    stop("No target variables found in latent states. Available states: ", 
+         paste(setdiff(names(states_df), "date"), collapse = ", "))
+  }
+  
+  states_for_plot <- states_df |>
+    dplyr::mutate(date = as.Date(.data$date)) |>
+    dplyr::select(date, tidyselect::all_of(available_states))
+  
+  # Create long-format data for plotting
+  actuals_long <- qdat_for_plot |>
+    dplyr::select(date, tidyselect::all_of(available_states)) |>
+    tidyr::pivot_longer(-date, names_to = "variable", values_to = "value") |>
+    dplyr::mutate(type = "Actual (Quarterly)")
+  
+  latent_long <- states_for_plot |>
+    tidyr::pivot_longer(-date, names_to = "variable", values_to = "value") |>
+    dplyr::mutate(type = "Latent State (MF-VAR)")
+  
+  combined <- dplyr::bind_rows(actuals_long, latent_long)
+  
+  # Create readable variable labels
+  var_labels <- c(
+    gdp_growth = "GDP Growth (%)",
+    inflation = "Inflation (%)",
+    exch_rate = "Exchange Rate (log CHF/EUR)"
+  )
+  
+  combined <- combined |>
+    dplyr::mutate(
+      variable_label = dplyr::recode(.data$variable, !!!var_labels)
+    )
+  
+  # Create the plot
+  p <- ggplot2::ggplot(combined, ggplot2::aes(x = date, y = value, color = type, linetype = type)) +
+    ggplot2::geom_line(linewidth = 0.7) +
+    ggplot2::facet_wrap(~ variable_label, scales = "free_y", ncol = 1) +
+    ggplot2::scale_color_manual(
+      values = c("Actual (Quarterly)" = "#d95f02", "Latent State (MF-VAR)" = "#1b9e77")
+    ) +
+    ggplot2::scale_linetype_manual(
+      values = c("Actual (Quarterly)" = "solid", "Latent State (MF-VAR)" = "dashed")
+    ) +
+    ggplot2::labs(
+      title = "MF-VAR Latent States vs. Actual Quarterly Variables",
+      subtitle = "Comparison of posterior mean latent states with observed data",
+      x = "Date",
+      y = "Value",
+      color = NULL,
+      linetype = NULL
+    ) +
+    ggplot2::theme_minimal(base_size = 11) +
+    ggplot2::theme(
+      legend.position = "bottom",
+      legend.title = ggplot2::element_blank(),
+      strip.text = ggplot2::element_text(face = "bold", size = 10),
+      panel.grid.minor = ggplot2::element_blank()
+    )
+  
+  if (is.null(filename)) {
+    filename <- "mfvar_latent_vs_actual.png"
+  }
+  
+  if (!dir.exists(out_dir)) {
+    dir.create(out_dir, recursive = TRUE)
+  }
+  
+  plot_path <- file.path(out_dir, filename)
+  ggplot2::ggsave(plot_path, plot = p, width = 10, height = 8, dpi = 150)
+  
+  message("Saved latent states vs. actuals plot: ", plot_path)
+  plot_path
+}

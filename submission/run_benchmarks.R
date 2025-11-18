@@ -174,20 +174,11 @@ stage_status("Data preparation", "start")
 target_vars <- target_variables
 y_ts_list <- build_q_ts(qdat_orig)
 
-max_holdout <- nrow(qdat_adj) - (n_lags + 1)
-if (max_holdout < 0) max_holdout <- 0
-eval_horizon <- min(max(forecast_steps), max_holdout)
-
-if (eval_horizon < max(forecast_steps)) {
-  stop("Need at least ", max(forecast_steps), " holdout quarters to evaluate 1-year-ahead errors. Reduce lag length or extend the sample.")
-}
-
-train_rows <- nrow(qdat_adj) - eval_horizon
-q_train_adj <- qdat_adj |> dplyr::slice_head(n = train_rows)
-q_train_orig <- qdat_orig |> dplyr::slice_head(n = train_rows)
-q_test_orig <- qdat_orig |> dplyr::slice_tail(n = eval_horizon)
-forecast_quarters <- q_test_orig$qtr
-forecast_dates <- zoo::as.Date(forecast_quarters, frac = 1)
+# No holdout evaluation - using CV only
+eval_horizon <- 0
+train_rows <- nrow(qdat_adj)
+q_train_adj <- qdat_adj
+q_train_orig <- qdat_orig
 
 stage_status(status = "done")
 
