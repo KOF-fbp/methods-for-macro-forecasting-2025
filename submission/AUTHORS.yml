@@ -1,10 +1,10 @@
 authors:
-  - name: "Lena Will"
-    email: "will@kof.ethz.ch"
-    eth_username: "lewill"
-  - name: "Merlin Scherer"
-    email: "scherer@kof.ethz.ch"
-    eth_username: "tischere"
+  - name: "Ben MElcher""
+    email: "bmelcher@ethz.ch"
+    eth_username: "bmelcher"
+  - name: "Giacomo Maggiore"
+    email: "maggiore@kof.ethz.ch"
+    eth_username: "gmaggiore"
 
 requirements:
   min_commits_per_author: 2

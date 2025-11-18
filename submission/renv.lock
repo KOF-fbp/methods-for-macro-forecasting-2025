@@ -52,6 +52,7 @@
       "NeedsCompilation": "no",
       "Repository": "RSPM",
       "Encoding": "UTF-8"
+      
     },
     "S7": {
       "Package": "S7",
