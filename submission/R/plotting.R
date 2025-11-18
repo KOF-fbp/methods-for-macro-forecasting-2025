@@ -481,7 +481,7 @@ plot_cv_errors_by_variable <- function(cv_metrics_tbl, out_dir, metric_type = "r
       variable_label = dplyr::case_when(
         variable == "gdp_growth" ~ "GDP Growth",
         variable == "inflation" ~ "Inflation",
-        variable == "exch_rate" ~ "Exchange Rate (log)",
+        variable == "exch_rate" ~ "Exchange Rate\n(log CHF/EUR)",
         TRUE ~ variable
       )
     )
@@ -547,7 +547,7 @@ plot_cv_errors_heatmap <- function(cv_metrics_tbl, out_dir, metric_type = "rmse"
       variable_label = dplyr::case_when(
         variable == "gdp_growth" ~ "GDP Growth",
         variable == "inflation" ~ "Inflation",
-        variable == "exch_rate" ~ "Exchange Rate (log)",
+        variable == "exch_rate" ~ "Exchange Rate\n(log CHF/EUR)",
         TRUE ~ variable
       )
     )
@@ -561,7 +561,7 @@ plot_cv_errors_heatmap <- function(cv_metrics_tbl, out_dir, metric_type = "rmse"
   
   p <- ggplot2::ggplot(plot_df, ggplot2::aes(x = model, y = variable_label, fill = .data[[metric_col]])) +
     ggplot2::geom_tile(colour = "white", linewidth = 1.5) +
-    ggplot2::geom_text(ggplot2::aes(label = sprintf("%.3f", .data[[metric_col]])), colour = "black", size = 4) +
+    ggplot2::geom_text(ggplot2::aes(label = sprintf("%.3f", .data[[metric_col]])), colour = "black", size = 3) +
     ggplot2::scale_fill_gradient2(
       low = "#1b9e77", mid = "#fee08b", high = "#d73027",
       midpoint = median(plot_df[[metric_col]], na.rm = TRUE),

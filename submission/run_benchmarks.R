@@ -221,7 +221,7 @@ holdout_metrics_detailed <- tibble::tibble()
 forecast_wide <- tibble::tibble()
 
 # Set to FALSE to run actual CV with 2 folds
-skip_cv_temp <- TRUE
+skip_cv_temp <- FALSE
 run_cv <- !skip_cv && !skip_cv_temp
 
 if (skip_cv_temp) {
@@ -251,7 +251,7 @@ if (fast_mode) {
 if (!length(cv_extra_months)) cv_extra_months <- 0L
 
 # Set to 2 folds per user request
-cv_max_folds <- 2L
+cv_max_folds <- 20L
 if (!is.na(max_folds_override)) {
   cv_max_folds <- max_folds_override
 }
