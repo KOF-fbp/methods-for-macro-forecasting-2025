@@ -38,16 +38,25 @@ snboffzisa_meta <- read_yaml("ch.snb.snboffzisa/ch.snb.snboffzisa.yaml")
 #                       Clean Data
 # ------------------------------------------------------
 
-# ---------------- Filter for SRF (EU marginal lending facility) and clean empty values
-# TODO: redo this!!!!
-snboffzisa_eu <- snboffzisa |> 
-  filter(overview == "srf") |>
+# ---------------- Filter for SRF (snb policy rate -> after 2019, before not published here, before 2019 -> avg. between upper and lower bound policy rate
+snboffzisa_eu <- snboffzisa |>
   mutate(date = as.Date(date)) |>
-  select(date, snboffzisa_eu = value)
-
+  select(overview, date, value) |>
+  tidyr::pivot_wider(
+    names_from = overview,
+    values_from = value
+  ) |>
+  mutate(
+    snboffzisa_rate = if_else(
+      !is.na(lz),
+      lz,                    # use lz when available
+      (ug1 + og1) / 2        # otherwise use average of upper + lower
+    )
+  ) |>
+  select(date, snboffzisa_rate) |>
+  arrange(date)
 
 tail(snboffzisa_eu)
-
 
 # ---------------- Devkum = DevisenKurse Monatlich 
 # chf to eur, monthly avg (m0) 
