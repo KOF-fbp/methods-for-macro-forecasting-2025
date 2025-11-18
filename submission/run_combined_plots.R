@@ -53,7 +53,7 @@ midas_fc <- readr::read_csv(midas_path, show_col_types = FALSE)
 
 # --- Load historical data ----------------------------------------------------
 qdat_raw <- read_quarterly_data(DATA_DIR)
-monthly_variables <- c("plkopr", "devkum", "amarbma", "snboffzisa")
+monthly_variables <- resolve_monthly_indicators()
 monthly_data <- read_combined_timeseries(DATA_DIR, variables = monthly_variables)
 
 trimmed <- trim_to_overlap(qdat_raw, monthly_data$ts_list, mode = "ragged", fill_method = "locf")

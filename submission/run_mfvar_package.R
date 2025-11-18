@@ -119,7 +119,7 @@ for (dir in c(OUT_DIR, CSV_DIR, PLOT_DIR, MODEL_DIR)) {
 # from the combined SNB dataset. We keep only periods where every chosen
 # monthly series is available.
 qdat_raw <- read_quarterly_data(DATA_DIR)
-monthly_variables <- c("plkopr", "devkum", "amarbma", "snboffzisa")
+monthly_variables <- resolve_monthly_indicators()
 monthly_data <- read_combined_timeseries(DATA_DIR, variables = monthly_variables)
 
 trimmed <- trim_to_overlap(

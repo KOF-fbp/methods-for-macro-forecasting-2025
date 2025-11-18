@@ -122,10 +122,10 @@ qdat_raw <- read_quarterly_data(DATA_DIR)
 # Load KOF Barometer for MIDAS-KOF models
 baro_raw <- fetch_kof_barometer()
 
-# Load combined timeseries for MF-VAR (4 SNB monthly indicators)
+# Load combined timeseries for MF-VAR indicators (SNB + SMI)
 monthly_raw <- read_combined_timeseries(
   DATA_DIR,
-  variables = c("plkopr", "devkum", "amarbma", "snboffzisa")
+  variables = resolve_monthly_indicators()
 )
 
 # Trim quarterly data to overlap with monthly indicators

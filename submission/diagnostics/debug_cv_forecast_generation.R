@@ -12,6 +12,7 @@ n_lags <- 5L
 
 # Load data
 qdat_orig <- read_quarterly_data(data_dir)
+monthly_variables <- resolve_monthly_indicators()
 monthly_raw <- read_combined_timeseries(data_dir, variables = monthly_variables)
 trimmed <- trim_to_overlap(qdat_orig, monthly_raw$ts_list,
                            mode = "ragged", fill_method = "locf",

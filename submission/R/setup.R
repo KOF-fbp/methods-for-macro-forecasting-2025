@@ -63,6 +63,38 @@ required_pkgs <- c(
 # the column names produced by the data-processing step.
 target_variables <- c("gdp_growth", "inflation", "exch_rate")
 
+default_monthly_indicators <- c(
+  "plkopr",
+  "devkum",
+  "amarbma",
+  "snboffzisa",
+  "smi_monthly_avg",
+  "smi_monthly_return"
+)
+
+resolve_monthly_indicators <- function() {
+  option_value <- getOption("mfvar.monthly_indicators", NULL)
+  if (!is.null(option_value)) {
+    indicators <- trimws(as.character(option_value))
+    indicators <- indicators[nzchar(indicators)]
+    if (length(indicators)) {
+      return(indicators)
+    }
+  }
+
+  env_value <- Sys.getenv("MFVAR_MONTHLY_INDICATORS", "")
+  if (nzchar(env_value)) {
+    indicators <- trimws(strsplit(env_value, ",", fixed = TRUE)[[1]])
+    indicators <- indicators[nzchar(indicators)]
+    if (length(indicators)) {
+      return(indicators)
+    }
+    warning("MFVAR_MONTHLY_INDICATORS override ignored because it produced no valid entries.")
+  }
+
+  default_monthly_indicators
+}
+
 # Guarded versions of RMSE/MAE that drop NAs so incomplete folds do not
 # crash the evaluation suite. Returning NA_real_ when no residuals are
 # available makes it easy to spot missing metrics later on.

@@ -3,7 +3,7 @@
 utils::globalVariables(c("time", "median", "ar2", "value", "midas_trend", "midas_simple"))
 time <- median <- ar2 <- value <- midas_trend <- midas_simple <- NULL
 
-plot_context_quarters <- getOption("mfvar.context_quarters", 8L)
+plot_context_quarters <- getOption("mfvar.context_quarters", 4L)
 
 plot_target_forecasts <- function(fc_df, ar_df, out_dir, title, subtitle, y_label, file_name) {
   stopifnot(nrow(fc_df) > 0)
@@ -30,7 +30,7 @@ plot_target_forecasts <- function(fc_df, ar_df, out_dir, title, subtitle, y_labe
       size = 2,
       inherit.aes = FALSE
     ) +
-    ggplot2::scale_x_date(labels = function(x) format(zoo::as.yearqtr(x), "%Y Q%q")) +
+    ggplot2::scale_x_date(date_breaks = "1 quarter", labels = function(x) format(zoo::as.yearqtr(x), "%Y Q%q")) +
     ggplot2::scale_colour_manual(name = NULL, values = c("MF-VAR" = "#1b9e77", "AR(2)" = "#d95f02")) +
     ggplot2::labs(
       title = title,
@@ -49,10 +49,25 @@ plot_target_forecasts <- function(fc_df, ar_df, out_dir, title, subtitle, y_labe
 plot_target_forecasts_with_history <- function(fc_df, ar_df, history_df, out_dir, title, subtitle, y_label, file_name) {
   stopifnot(nrow(fc_df) > 0, nrow(history_df) > 0)
 
+  history_df <- history_df |>
+    dplyr::filter(is.finite(value))
+
+  if (!nrow(history_df)) {
+    stop("History data contains no finite values for plotting.")
+  }
+
   hist_plot <- history_df |>
+    dplyr::filter(is.finite(value)) |>
     dplyr::mutate(time = as.Date(time)) |>
-    dplyr::arrange(time) |>
-    dplyr::slice_tail(n = plot_context_quarters)
+    dplyr::arrange(time)
+
+  if (!nrow(hist_plot)) {
+    stop("History data contains no finite values for plotting.")
+  }
+
+  if (nrow(hist_plot) > plot_context_quarters) {
+    hist_plot <- hist_plot |> dplyr::slice_tail(n = plot_context_quarters)
+  }
 
   forecast_df <- fc_df |>
     dplyr::mutate(time = as.Date(time))
@@ -84,6 +99,19 @@ plot_target_forecasts_with_history <- function(fc_df, ar_df, history_df, out_dir
       dplyr::arrange(time)
   }
 
+  x_values <- c(hist_plot$time, forecast_df$time, ar_plot$time)
+  x_values <- x_values[is.finite(x_values)]
+  if (!length(x_values)) {
+    stop("No valid time values available for plotting.")
+  }
+  x_min <- min(x_values)
+  x_max <- max(x_values)
+  q_breaks <- seq(zoo::as.yearqtr(x_min), zoo::as.yearqtr(x_max), by = 0.25)
+  if (!length(q_breaks)) {
+    q_breaks <- c(zoo::as.yearqtr(x_min), zoo::as.yearqtr(x_max))
+  }
+  x_breaks <- zoo::as.Date(q_breaks, frac = 1)
+
   p <- ggplot2::ggplot(hist_plot, ggplot2::aes(x = time, y = value)) +
     ggplot2::geom_line(colour = "#4c4c4c") +
     ggplot2::geom_vline(xintercept = last_actual, linetype = "dotted", colour = "#4c4c4c") +
@@ -112,7 +140,11 @@ plot_target_forecasts_with_history <- function(fc_df, ar_df, history_df, out_dir
       size = 2,
       inherit.aes = FALSE
     ) +
-    ggplot2::scale_x_date(labels = function(x) format(zoo::as.yearqtr(x), "%Y Q%q")) +
+    ggplot2::scale_x_date(
+      breaks = x_breaks,
+      labels = function(x) format(zoo::as.yearqtr(x), "%Y Q%q"),
+      limits = c(x_min, x_max)
+    ) +
     ggplot2::scale_colour_manual(name = NULL, values = c("MF-VAR" = "#1b9e77", "AR(2)" = "#d95f02")) +
     ggplot2::labs(
       title = title,
@@ -190,8 +222,11 @@ plot_combined_forecasts <- function(mfvar_df, midas_df, ar_df, history_df, out_d
 
   hist_plot <- history_df |>
     dplyr::mutate(time = as.Date(time)) |>
-    dplyr::arrange(time) |>
-    dplyr::slice_tail(n = plot_context_quarters)
+    dplyr::arrange(time)
+
+  if (nrow(hist_plot) > plot_context_quarters) {
+    hist_plot <- hist_plot |> dplyr::slice_tail(n = plot_context_quarters)
+  }
 
   mfvar_plot <- mfvar_df |>
     dplyr::mutate(time = as.Date(time))
@@ -235,6 +270,19 @@ plot_combined_forecasts <- function(mfvar_df, midas_df, ar_df, history_df, out_d
     ) |>
       dplyr::arrange(time)
   }
+
+  x_values <- c(hist_plot$time, mfvar_plot$time, midas_plot$time, ar_plot$time)
+  x_values <- x_values[is.finite(x_values)]
+  if (!length(x_values)) {
+    stop("No valid time values available for plotting.")
+  }
+  x_min <- min(x_values)
+  x_max <- max(x_values)
+  q_breaks <- seq(zoo::as.yearqtr(x_min), zoo::as.yearqtr(x_max), by = 0.25)
+  if (!length(q_breaks)) {
+    q_breaks <- c(zoo::as.yearqtr(x_min), zoo::as.yearqtr(x_max))
+  }
+  x_breaks <- zoo::as.Date(q_breaks, frac = 1)
 
   p <- ggplot2::ggplot(hist_plot, ggplot2::aes(x = time, y = value)) +
     ggplot2::geom_line(colour = "#4c4c4c") +
@@ -289,7 +337,11 @@ plot_combined_forecasts <- function(mfvar_df, midas_df, ar_df, history_df, out_d
       size = 1.8,
       inherit.aes = FALSE
     ) +
-    ggplot2::scale_x_date(labels = function(x) format(zoo::as.yearqtr(x), "%Y Q%q")) +
+    ggplot2::scale_x_date(
+      breaks = x_breaks,
+      labels = function(x) format(zoo::as.yearqtr(x), "%Y Q%q"),
+      limits = c(x_min, x_max)
+    ) +
     ggplot2::scale_colour_manual(
       name = NULL,
       values = c(
