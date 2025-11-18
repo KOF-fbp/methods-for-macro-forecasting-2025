@@ -19,6 +19,64 @@ start_time <- Sys.time()
 
 variable <- step_ahead <- horizon <- lower <- median <- upper <- NULL
 
+months_per_quarter <- 3L
+
+add_quarters <- function(yq, n = 1L) {
+  zoo::as.yearqtr(yq) + (as.integer(n) / months_per_quarter)
+}
+
+quarter_month_sequence <- function(yq, length_out = months_per_quarter) {
+  start_date <- zoo::as.Date(zoo::as.yearqtr(yq), frac = 0)
+  seq.Date(start_date, by = "1 month", length.out = length_out)
+}
+
+count_observed_months <- function(last_quarter, monthly_list) {
+  if (!length(monthly_list)) {
+    return(0L)
+  }
+  latest_yearmon <- max(vapply(monthly_list, function(ts_obj) {
+    ts_end <- stats::end(ts_obj)
+    zoo::as.yearmon(sprintf("%04d-%02d", ts_end[1], ts_end[2]))
+  }, zoo::as.yearmon("1900-01")))
+
+  next_quarter <- add_quarters(last_quarter, 1L)
+  quarter_months <- zoo::as.yearmon(quarter_month_sequence(next_quarter))
+  sum(quarter_months <= latest_yearmon)
+}
+
+compute_ragged_nowcast <- function(variable, months_observed, target_quarter, latent_states_long, monthly_forecast) {
+  if (months_observed <= 0L) {
+    return(NA_real_)
+  }
+
+  month_seq <- quarter_month_sequence(target_quarter)
+  observed_dates <- month_seq[seq_len(months_observed)]
+
+  observed_vals <- latent_states_long |>
+    dplyr::filter(.data$variable == !!variable, .data$date %in% observed_dates) |>
+    dplyr::arrange(.data$date) |>
+    dplyr::pull(.data$value)
+
+  if (length(observed_vals) != months_observed) {
+    return(NA_real_)
+  }
+
+  remaining <- months_per_quarter - months_observed
+  future_vals <- numeric(0)
+  if (remaining > 0L) {
+    future_dates <- month_seq[(months_observed + 1):months_per_quarter]
+    future_vals <- monthly_forecast |>
+      dplyr::filter(.data$variable == !!variable, .data$fcst_date %in% future_dates) |>
+      dplyr::arrange(.data$fcst_date) |>
+      dplyr::pull(.data$median)
+    if (length(future_vals) != remaining) {
+      return(NA_real_)
+    }
+  }
+
+  mean(c(observed_vals, future_vals))
+}
+
 cli_args <- commandArgs(trailingOnly = TRUE)
 early_strategy <- getOption("mfvar.early_monthly", Sys.getenv("MFVAR_EARLY_MONTHLY", "fill"))
 arg_match <- cli_args[grepl("^--early-monthly=", cli_args)]
@@ -76,6 +134,8 @@ qdat_orig <- trimmed$qdat
 qdat_adj <- stationary$data
 transforms <- stationary$transforms
 monthly_ts <- window_monthly_series(trimmed$monthly, qdat_orig, end_mode = "available")
+last_obs_qtr <- tail(qdat_orig$qtr, 1)
+ragged_months_observed <- count_observed_months(last_obs_qtr, monthly_ts)
 Y <- build_Y(qdat_adj, monthly_ts)
 
 target_vars <- target_variables
@@ -86,11 +146,33 @@ n_lags <- 5
 # (which aggregate into 4 quarters = 1-year horizon for quarterly variables).
 mod_ss <- estimate_mfvar_model(Y, n_lags, n_fcst = 12, seed = mfvar_seed)
 
+monthly_forecast_full <- NULL
+if (ragged_months_observed > 0L) {
+  monthly_forecast_full <- tryCatch(
+    predict(mod_ss, aggregate_fcst = FALSE, pred_bands = 0.8),
+    error = function(err) {
+      warning(sprintf("Monthly forecasts unavailable: %s", conditionMessage(err)), call. = FALSE)
+      NULL
+    }
+  )
+}
+
 latent_states_path <- NULL
 latent_states_plot <- NULL
 latent_heatmap_plot <- NULL
-if (!identical(Sys.getenv("MFVAR_EXTRACT_STATES"), "0")) {
-  latent_states <- extract_latent_states(mod_ss, summary = "mean")
+latent_states <- NULL
+need_latent_states <- ragged_months_observed > 0L || !identical(Sys.getenv("MFVAR_EXTRACT_STATES"), "0")
+if (isTRUE(need_latent_states)) {
+  latent_states <- tryCatch(
+    extract_latent_states(mod_ss, summary = "mean"),
+    error = function(err) {
+      warning(sprintf("Latent state extraction failed: %s", conditionMessage(err)), call. = FALSE)
+      NULL
+    }
+  )
+}
+
+if (!identical(Sys.getenv("MFVAR_EXTRACT_STATES"), "0") && !is.null(latent_states)) {
   latent_states_path <- save_latent_states_csv(latent_states, CSV_DIR)
   latent_states_plot <- plot_latent_states(latent_states, PLOT_DIR)
   latent_heatmap_plot <- plot_latent_states(latent_states, PLOT_DIR, mode = "heatmap")
@@ -113,9 +195,6 @@ fc <- fc |>
   ) |>
   dplyr::ungroup() |>
   dplyr::select(-step_ahead_tmp, -time_index)
-
-# Store last observation quarter for forecast date calculation
-last_obs_qtr <- tail(qdat_orig$qtr, 1)
 
 # Split forecasts into quarterly (limited to 4 steps) and monthly (all steps)
 fc_q <- fc |>
@@ -141,6 +220,42 @@ fc_q <- fc |>
     quarter_end = zoo::as.Date(forecast_qtr, frac = 1)
   ) |>
   dplyr::select(-forecast_qtr)
+
+if (ragged_months_observed > 0L && !is.null(latent_states) && !is.null(monthly_forecast_full)) {
+  latent_states_long <- latent_states |>
+    tidyr::pivot_longer(-date, names_to = "variable", values_to = "value") |>
+    dplyr::filter(.data$variable %in% target_vars, !is.na(.data$value))
+
+  monthly_fcst_targets <- monthly_forecast_full |>
+    dplyr::filter(.data$variable %in% target_vars)
+
+  if (nrow(latent_states_long) && nrow(monthly_fcst_targets)) {
+    target_quarter <- add_quarters(last_obs_qtr, 1L)
+    ragged_vals <- vapply(target_vars, function(var) {
+      compute_ragged_nowcast(
+        variable = var,
+        months_observed = ragged_months_observed,
+        target_quarter = target_quarter,
+        latent_states_long = latent_states_long,
+        monthly_forecast = monthly_fcst_targets
+      )
+    }, numeric(1))
+
+    time_index <- compute_time_index(n_obs, 1L)
+    ragged_restored <- restore_series_values(ragged_vals, target_vars, rep(time_index, length(target_vars)), transforms)
+    ragged_tbl <- tibble::tibble(variable = target_vars, ragged_nowcast = ragged_restored) |>
+      dplyr::mutate(
+        ragged_nowcast = dplyr::if_else(variable == "exch_rate", exp(ragged_nowcast), ragged_nowcast)
+      )
+
+    fc_q <- fc_q |>
+      dplyr::left_join(ragged_tbl, by = "variable") |>
+      dplyr::mutate(
+        median = dplyr::if_else(step_ahead == 1L & !is.na(ragged_nowcast), ragged_nowcast, median)
+      ) |>
+      dplyr::select(-ragged_nowcast)
+  }
+}
 
 fc_m <- fc |>
   dplyr::filter(!variable %in% target_vars)

@@ -2,7 +2,7 @@
 ==== MF-VAR summary (Minnesota prior, IW covariance) ====
 
 Mixed-frequency BVAR with:
-6 variables (plkopr, devkum, amarbma, gdp_growth, inflation, exch_rate)
+7 variables (plkopr, devkum, amarbma, snboffzisa, gdp_growth, inflation, exch_rate)
 Prior: minn
 
 Error covariance matrix: Inverse Wishart
