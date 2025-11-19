@@ -132,6 +132,12 @@ soc <- bv_soc(mode = soc_mode, sd = soc_sd)
 #  combination of priors
 # minnesota regularizes the autoregressive coefficients, reducing the risk of overfitting.
 # soc  imposes a constraint on the sum of the coefficients, ensuring the model captures persistence
+
+#build dataframe for mean log score comparison between AR, BVAR and each variable
+mean_log_scores <- data.frame(
+  variable = forecast_variables
+)
+
 priors <- bv_priors(
   hyper = c("lambda", "alpha", "psi"),
   mn = mn,
@@ -201,6 +207,10 @@ for (i in seq_along(forecast_variables)) {
   cat("MAE for", var, ":", mae, "\n", "\n")
 
   mean_log_score <- mean(log_score_bvar[valid_indices, var], na.rm = TRUE)
+
+  #udate mean log scores data frame
+  mean_log_scores$bvar[mean_log_scores$variable == var] <- mean_log_score
+
   cat("Mean Log Score for", var, ":", mean_log_score, "\n\n")
   
 }
@@ -402,6 +412,13 @@ for (var in forecast_variables) {
                                          mean = fc_mean, 
                                          sd = fc_sd, 
                                          log = TRUE)
+
+    #mean log score for each variable
+    #update mean log scores data frame
+    valid_indices <- which(!is.na(log_score_ar1[, var]))
+    mean_log_score <- mean(log_score_ar1[valid_indices, var], na.rm = TRUE)
+    mean_log_scores$ar1[mean_log_scores$variable == var] <- mean_log_score
+
     
     #save forecasts
     pred_q50_ar1[t_idx, var]  <- as.numeric(fc$mean[horizon])     # median ≈ mean for Gaussian ARIMA
@@ -411,6 +428,10 @@ for (var in forecast_variables) {
     pred_q975_ar1[t_idx, var] <- fc$upper[horizon, idx95]         # 97.5th
   }
 }
+
+
+#export mean_log_scores
+write.csv(mean_log_scores, file = "output/mean_log_scores_comparison.csv", row.names = FALSE)
 
 # evaluation
 for (i in seq_along(forecast_variables)) {
