@@ -124,7 +124,7 @@ for (var in selected_variables) {
 # set priors 
 mn <- bv_minnesota(
   lambda = bv_lambda(mode = mn_mode, sd = mn_sd, min = mn_min, max = mn_max),
-  alpha  = bv_alpha(mode = 3),
+  alpha  = bv_alpha(mode = 4),
 )
 
 soc <- bv_soc(mode = soc_mode, sd = soc_sd)  
@@ -133,15 +133,17 @@ soc <- bv_soc(mode = soc_mode, sd = soc_sd)
 # minnesota regularizes the autoregressive coefficients, reducing the risk of overfitting.
 # soc  imposes a constraint on the sum of the coefficients, ensuring the model captures persistence
 
-#build dataframe for mean log score comparison between AR, BVAR and each variable
-mean_log_scores <- data.frame(
-  variable = forecast_variables
-)
+
 
 priors <- bv_priors(
   hyper = c("lambda", "alpha", "psi"),
   mn = mn,
   soc = soc
+)
+
+#build dataframe for mean log score comparison between AR, BVAR and each variable
+df_log_scores <- data.frame(
+  variable = forecast_variables
 )
 
 # ------------------------- rolling window -----------------------------
@@ -196,22 +198,22 @@ for (i in seq(from = window_size + lag_number, to = n_obs - horizon)) {
 
 for (i in seq_along(forecast_variables)) {
   var <- forecast_variables[i]
-  cat("Evaluating variable:", var, "\n")
+  cat("BVAR: Evaluating variable:", var, "\n")
   cat("--------------------------------", "\n")
   
   valid_indices <- which(!is.na(pred_q50[, var]))
   rmse <- sqrt(mean((pred_q50[valid_indices, var] - data[valid_indices, var])^2))
   mae <- mean(abs(pred_q50[valid_indices, var] - data[valid_indices, var]))
   
-  cat("RMSE for", var, ":", rmse, "\n")
-  cat("MAE for", var, ":", mae, "\n", "\n")
+  cat("BVAR: RMSE for", var, ":", rmse, "\n")
+  cat("BVAR: MAE for", var, ":", mae, "\n", "\n")
 
   mean_log_score <- mean(log_score_bvar[valid_indices, var], na.rm = TRUE)
 
   #udate mean log scores data frame
-  mean_log_scores$bvar[mean_log_scores$variable == var] <- mean_log_score
+  df_log_scores$bvar[df_log_scores$variable == var] <- mean_log_score
 
-  cat("Mean Log Score for", var, ":", mean_log_score, "\n\n")
+  cat("BVAR: Mean Log Score for", var, ":", mean_log_score, "\n\n")
   
 }
 
@@ -298,6 +300,7 @@ ggsave(paste0(output_folder, "/bvar_rolling_w_combined.png"),
 #--------------------- end of BVAR rolling window forecast --------------------
 #------------------------------------------------------------------------------
 # in the next section, we compare BVAR with VAR and AR models
+
 # -------------------- VAR model (OLS) rolling window forecast ----------------
 
 pred_q50_var <- matrix(NA_real_, nrow = n_obs, ncol = length(selected_variables),
@@ -331,15 +334,15 @@ for (i in seq(from = window_size + lag_number, to = n_obs - horizon)) {
 # evaluation
 for (i in seq_along(forecast_variables)) {
   var <- forecast_variables[i]
-  cat("Evaluating variable:", var, "\n")
+  cat("VAR: Evaluating variable:", var, "\n")
   cat("--------------------------------", "\n")
   
   valid_indices <- which(!is.na(pred_q50_var[, var]))
   rmse <- sqrt(mean((pred_q50_var[valid_indices, var] - data[valid_indices, var])^2))
   mae  <- mean(abs(pred_q50_var[valid_indices, var] - data[valid_indices, var]))
   
-  cat("RMSE for", var, ":", rmse, "\n")
-  cat("MAE for", var, ":", mae, "\n\n")
+  cat("VAR: RMSE for", var, ":", rmse, "\n")
+  cat("VAR: ƒMAE for", var, ":", mae, "\n\n")
 }
 
 # plot VAR (diffusion Prior) vs actual vs BVAR forecasts
@@ -417,7 +420,7 @@ for (var in forecast_variables) {
     #update mean log scores data frame
     valid_indices <- which(!is.na(log_score_ar1[, var]))
     mean_log_score <- mean(log_score_ar1[valid_indices, var], na.rm = TRUE)
-    mean_log_scores$ar1[mean_log_scores$variable == var] <- mean_log_score
+    df_log_scores$ar1[df_log_scores$variable == var] <- mean_log_score
 
     
     #save forecasts
@@ -430,21 +433,21 @@ for (var in forecast_variables) {
 }
 
 
-#export mean_log_scores
-write.csv(mean_log_scores, file = "output/mean_log_scores_comparison.csv", row.names = FALSE)
+#export df_log_scores
+write.csv(df_log_scores, file = "output/df_log_scores_comparison.csv", row.names = FALSE)
 
 # evaluation
 for (i in seq_along(forecast_variables)) {
   var <- forecast_variables[i]
-  cat("Evaluating variable:", var, "\n")
+  cat("AR: Evaluating variable:", var, "\n")
   cat("--------------------------------", "\n")
   valid_indices <- which(!is.na(pred_q50_ar1[, var]))
   rmse <- sqrt(mean((pred_q50_ar1[valid_indices, var] - data[valid_indices, var])^2))
   mae  <- mean(abs(pred_q50_ar1[valid_indices, var] - data[valid_indices, var]))
-  cat("RMSE for", var, ":", rmse, "\n")
-  cat("MAE for", var, ":", mae, "\n\n")
+  cat("AR: RMSE for", var, ":", rmse, "\n")
+  cat("AR: MAE for", var, ":", mae, "\n\n")
   mean_log_score <- mean(log_score_ar1[valid_indices, var], na.rm = TRUE)
-  cat("Mean Log Score for", var, ":", mean_log_score, "\n\n")
+  cat("AR: Mean Log Score for", var, ":", mean_log_score, "\n\n")
 }
 
 library(patchwork)
