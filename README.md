@@ -20,4 +20,4 @@ Course repository for the ETH autumn 2025 course on "Methods of Macroeconomic Fo
 |19 Nov 2025 | 11pm | Hand in your presentation slides |
 |20 Nov 2025 |10am - 2pm |Presentations|
 |21 Nov 2025 |10am - 2pm |Presentations|
-|12 Dec 2025 |10am - 12pm |Exam|
+|12 Dec 2025 |10:30am - 11:30am |Exam|
